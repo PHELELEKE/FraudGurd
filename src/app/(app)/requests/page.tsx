@@ -1,0 +1,146 @@
+import Link from "next/link";
+import { requirePage } from "@/lib/auth";
+import { DEPARTMENTS, listCategories, listRequests } from "@/lib/queries";
+import { can } from "@/lib/roles";
+import { fmtDate } from "@/lib/format";
+import { Amount, Empty, PageHeader, Panel, StatusTag } from "@/components/ui";
+import { RequestForm } from "@/components/RequestForm";
+import { RequestActions } from "@/components/RequestActions";
+
+export default async function RequestsPage({ searchParams }: { searchParams: Promise<{ show?: string }> }) {
+  const user = await requirePage("/requests");
+  const { show } = await searchParams;
+  const [all, categories] = await Promise.all([listRequests(user), listCategories()]);
+  const canCreate = can(user.role, "request.create");
+  const canDecide = can(user.role, "request.decide");
+
+  // Approvers see a queue of what is waiting for them first. Managers approve employees, the Finance Manager approves managers.
+  const mine = (r: (typeof all)[number]) =>
+    r.status === "pending" &&
+    r.requester_id !== user.id &&
+    (user.role === "finance_manager" ? r.requester_role !== "employee" : r.requester_role === "employee");
+  const view = canDecide && show !== "all" ? "queue" : "all";
+  const rows = view === "queue" ? all.filter(mine) : all;
+  const queueCount = all.filter(mine).length;
+
+  const form = (
+    <RequestForm
+      categories={categories.map((c) => c.category)}
+      departments={[...DEPARTMENTS]}
+      defaultDepartment={(DEPARTMENTS as readonly string[]).includes(user.department) ? user.department : "Admin"}
+    />
+  );
+
+  return (
+    <>
+      <PageHeader
+        title={user.role === "employee" ? "My requests" : canDecide ? "Requests" : "All requests"}
+        subtitle={
+          user.role === "employee"
+            ? "Ask for what you need. A manager approves it before anything is ordered."
+            : user.role === "manager"
+              ? "Approve or reject what your team asks for. You can never decide your own request."
+              : user.role === "finance_manager"
+                ? "Managers' requests come to you. You can never decide your own request."
+                : "Every purchase starts as a request that is approved before anything is ordered."
+        }
+        actions={
+          canDecide ? (
+            <div className="flex gap-1 rounded-[10px] border border-line bg-panel p-1">
+              <Link href="/requests" className={`rounded-lg px-3 py-1.5 text-[14px] ${view === "queue" ? "bg-raised font-medium" : "text-mute"}`}>
+                Waiting for me{queueCount > 0 ? ` (${queueCount})` : ""}
+              </Link>
+              <Link href="/requests?show=all" className={`rounded-lg px-3 py-1.5 text-[14px] ${view === "all" ? "bg-raised font-medium" : "text-mute"}`}>
+                All requests
+              </Link>
+            </div>
+          ) : undefined
+        }
+      />
+
+      <div className={`grid gap-4 ${user.role === "employee" ? "lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]" : ""}`}>
+        {user.role === "employee" && (
+          <Panel title="New request" subtitle="Tell us what you need and why.">
+            {form}
+          </Panel>
+        )}
+
+        <div className="space-y-4">
+          {user.role === "manager" && (
+            <details className="panel group">
+              <summary className="flex items-center justify-between px-6 py-4">
+                <span>
+                  <span className="text-lg font-semibold tracking-tight">Make a request of your own</span>
+                  <span className="mt-0.5 block text-[14px] text-mute">Your own requests are approved by the Finance Manager.</span>
+                </span>
+                <span className="btn btn-sm">Open form</span>
+              </summary>
+              <div className="border-t border-line px-6 py-5">{form}</div>
+            </details>
+          )}
+
+          <Panel title={view === "queue" ? "Waiting for your decision" : user.role === "employee" ? "Your requests" : "All requests"} flush>
+            {rows.length === 0 ? (
+              <Empty title={view === "queue" ? "Nothing is waiting for you" : "No requests yet"}>
+                {view === "queue"
+                  ? "New requests appear here by themselves and a badge shows on the menu."
+                  : user.role === "employee"
+                    ? "Use the form to make the first one."
+                    : "Requests appear here once people make them."}
+              </Empty>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Request</th>
+                      <th className="r">Qty</th>
+                      <th className="r">Estimate</th>
+                      {user.role !== "employee" && <th>Requested by</th>}
+                      <th>Status</th>
+                      {canDecide && <th></th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r) => (
+                      <tr key={r.id}>
+                        <td className="max-w-[320px]">
+                          <div className="font-medium">{r.item}</div>
+                          <div className="num text-[13px] text-mute">
+                            {r.ref}, {r.category}, {r.department}, {fmtDate(r.created_at)}
+                          </div>
+                          {r.status === "pending" && <div className="mt-1 text-[13px] text-mute">Reason: {r.reason}</div>}
+                          {r.decision_note && <div className="mt-1 text-[13px] text-mute">Note: {r.decision_note}</div>}
+                        </td>
+                        <td className="num r">{r.quantity}</td>
+                        <td className="r">
+                          <Amount value={r.estimated_cost} />
+                        </td>
+                        {user.role !== "employee" && <td>{r.requester}</td>}
+                        <td>
+                          <StatusTag status={r.status} />
+                          {r.decided_by_name && <div className="mt-1 text-[13px] text-mute">by {r.decided_by_name}</div>}
+                        </td>
+                        {canDecide && (
+                          <td className="r">
+                            {r.status !== "pending" ? null : r.requester_id === user.id ? (
+                              <span className="text-[13px] text-mute">Your own request. Someone else has to decide it.</span>
+                            ) : user.role === "manager" && r.requester_role !== "employee" ? (
+                              <span className="text-[13px] text-mute">Goes to the Finance Manager.</span>
+                            ) : (
+                              <RequestActions id={r.id} />
+                            )}
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Panel>
+        </div>
+      </div>
+    </>
+  );
+}
