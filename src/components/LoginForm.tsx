@@ -4,14 +4,7 @@ import { useRouter } from "next/navigation";
 import { post, ErrorNote } from "./api";
 import { Field } from "./ui";
 
-interface Account {
-  email: string;
-  name: string;
-  role: string;
-  color: string;
-}
-
-export function LoginForm({ demo, accounts }: { demo: boolean; accounts: Account[] }) {
+export function LoginForm() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -51,29 +44,6 @@ export function LoginForm({ demo, accounts }: { demo: boolean; accounts: Account
         </button>
       </form>
       <ErrorNote message={error} />
-
-      {demo && (
-        <div className="login-demo mt-7 border-t pt-5">
-          <p className="mb-3 text-[14px] text-[#aab5cc]">Demo accounts. Pick a role to sign in as that person.</p>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {accounts.map((a) => (
-              <button
-                key={a.email}
-                type="button"
-                disabled={busy}
-                onClick={() => signIn(a.email, "Password123!")}
-                className="login-account flex items-center gap-3 px-3.5 py-2.5 text-left"
-              >
-                <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: a.color }} />
-                <span className="min-w-0">
-                  <span className="block truncate font-medium">{a.role}</span>
-                  <span className="block truncate text-[13px] text-[#8f9bb5]">{a.name}</span>
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
     </>
   );
 }

@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { homeFor } from "@/lib/roles";
-import { DEMO_ACCOUNTS } from "@/lib/demo";
 import { Logo } from "@/components/ui";
 import { LoginForm } from "@/components/LoginForm";
 import "./login.css";
@@ -11,7 +10,6 @@ export const dynamic = "force-dynamic";
 export default async function LoginPage() {
   const user = await getCurrentUser();
   if (user) redirect(homeFor(user.role));
-  const demo = process.env.DEMO_MODE !== "false";
 
   return (
     <main className="login-shell">
@@ -26,7 +24,7 @@ export default async function LoginPage() {
           <p className="login-lead">
             FraudGuard flags unusual purchases for a person to review. It never accuses anyone.
           </p>
-          <LoginForm demo={demo} accounts={[...DEMO_ACCOUNTS]} />
+          <LoginForm />
         </section>
 
         <footer className="login-foot">Fraud monitoring for Small Civils and VZ Coatings</footer>
