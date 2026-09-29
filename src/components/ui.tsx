@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import { rand } from "@/lib/format";
+import { splitVat, addVat } from "@/lib/money";
+import { COMPANY_LABEL, COMPANY_COLOR, type Company } from "@/lib/companies";
 
 export function Panel({
   title,
@@ -114,5 +116,39 @@ export function Logo({ size = 28 }: { size?: number }) {
       <path d="M12 2L4 5V11.5C4 16.5 7.5 21 12 22C16.5 21 20 16.5 20 11.5V5L12 2Z" fill="#4C8DFF" />
       <path d="M10 11.5L11.5 13L14.5 9.5" stroke="#14161A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
+  );
+}
+
+/** A neutral chip with a coloured dot and the full company name, so it never reads as a risk or status tag. */
+export function CompanyTag({ company }: { company: Company }) {
+  return (
+    <span className="company-tag">
+      <span className="company-dot" style={{ background: COMPANY_COLOR[company] }} />
+      {COMPANY_LABEL[company]}
+    </span>
+  );
+}
+
+/** Shows a VAT-inclusive total, with the VAT portion of it spelled out underneath in muted text. */
+export function AmountVat({ value, className = "" }: { value: number; className?: string }) {
+  const { vat } = splitVat(value);
+  return (
+    <span className={className}>
+      <span className="num block">{rand(value)}</span>
+      <span className="num block text-[13px] font-normal text-mute">incl. VAT {rand(vat)}</span>
+    </span>
+  );
+}
+
+/** For an amount someone quoted excluding VAT: shows it, then what VAT adds and the total including it. */
+export function AmountExclVat({ value, className = "" }: { value: number; className?: string }) {
+  const { vat, total } = addVat(value);
+  return (
+    <span className={className}>
+      <span className="num block">{rand(value)}</span>
+      <span className="num block text-[13px] font-normal text-mute">
+        + VAT {rand(vat)} = {rand(total)} incl.
+      </span>
+    </span>
   );
 }

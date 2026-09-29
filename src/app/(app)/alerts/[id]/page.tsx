@@ -4,7 +4,7 @@ import { requirePage } from "@/lib/auth";
 import { getAlert } from "@/lib/queries";
 import { can } from "@/lib/roles";
 import { daysSince, fmtDate, fmtDateTime, maskAccount, rand } from "@/lib/format";
-import { Amount, Panel, RiskTag, StatusTag, Tag } from "@/components/ui";
+import { AmountVat, CompanyTag, Panel, RiskTag, StatusTag, Tag } from "@/components/ui";
 import { AlertDecision } from "@/components/AlertDecision";
 
 export default async function AlertPage({ params }: { params: Promise<{ id: string }> }) {
@@ -33,6 +33,9 @@ export default async function AlertPage({ params }: { params: Promise<{ id: stri
 
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
+          <div className="mb-2">
+            <CompanyTag company={a.company} />
+          </div>
           <h1 className="text-[28px] leading-9 font-semibold tracking-tight">
             Invoice {a.invoice.number} from {a.supplier}
           </h1>
@@ -41,9 +44,7 @@ export default async function AlertPage({ params }: { params: Promise<{ id: stri
           </p>
         </div>
         <div className="text-right">
-          <div className="text-[28px] leading-9 font-semibold">
-            <Amount value={a.invoice.total} />
-          </div>
+          <AmountVat value={a.invoice.total} className="text-[28px] leading-9 font-semibold" />
           <div className="mt-1">
             <StatusTag status={a.status} label={active ? "Payment held" : undefined} />
           </div>

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { post, useAction, ErrorNote } from "./api";
 import { Field } from "./ui";
 import { rand } from "@/lib/format";
+import { COMPANIES, COMPANY_LABEL, type Company } from "@/lib/companies";
 
 /* ---------- purchase orders ---------- */
 
@@ -11,16 +12,20 @@ export function CreateOrderRow({
   quantity,
   estimatedUnit,
   suppliers,
+  requestCompany,
 }: {
   requestId: number;
   quantity: number;
   estimatedUnit: number;
   suppliers: { id: number; name: string; status: string }[];
+  requestCompany: Company;
 }) {
   const [supplierId, setSupplierId] = useState(String(suppliers[0]?.id ?? ""));
   const [unitPrice, setUnitPrice] = useState(String(estimatedUnit));
+  const [company, setCompany] = useState<Company>(requestCompany);
   const { run, busy, error } = useAction();
   const total = Math.round(quantity * Number(unitPrice || 0) * 100) / 100;
+  const vat = Math.round(total * 0.15 * 100) / 100;
 
   return (
     <div>
@@ -37,21 +42,38 @@ export function CreateOrderRow({
           </select>
         </div>
         <div className="w-[150px]">
-          <label className="label">Unit price (R)</label>
+          <label className="label">Unit price (R, incl. VAT)</label>
           <input className="input num" type="number" min={0.01} step="0.01" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} />
         </div>
-        <div className="num w-[130px] pb-2 text-[15px]">
+        <div className="w-[170px]">
+          <label className="label">Company</label>
+          <select className="input" value={company} onChange={(e) => setCompany(e.target.value as Company)}>
+            {COMPANIES.map((c) => (
+              <option key={c} value={c}>
+                {COMPANY_LABEL[c]}
+                {c === requestCompany ? " (as requested)" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="num pb-2 text-[15px]">
           <span className="text-mute">Total </span>
           {rand(total)}
+          <span className="ml-1 text-[13px] text-mute">(incl. VAT {rand(vat)})</span>
         </div>
         <button
           className="btn btn-primary"
           disabled={busy || !supplierId || !(Number(unitPrice) > 0)}
-          onClick={() => run(() => post("/api/orders", { requestId, supplierId: Number(supplierId), unitPrice: Number(unitPrice) }))}
+          onClick={() => run(() => post("/api/orders", { requestId, supplierId: Number(supplierId), unitPrice: Number(unitPrice), company }))}
         >
           Create purchase order
         </button>
       </div>
+      {company !== requestCompany && (
+        <p className="mt-2 text-[13px] text-mid">
+          This order will move to {COMPANY_LABEL[company]}, even though the request was made under {COMPANY_LABEL[requestCompany]}.
+        </p>
+      )}
       <ErrorNote message={error} />
     </div>
   );

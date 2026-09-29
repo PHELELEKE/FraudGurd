@@ -9,3 +9,10 @@ export function splitVat(total: number): { net: number; vat: number } {
   const net = round2(total / (1 + VAT_RATE));
   return { net, vat: round2(total - net) };
 }
+
+/** The opposite of splitVat: the amount someone quotes excludes VAT, so VAT is added on top. */
+export function addVat(amountExclVat: number): { net: number; vat: number; total: number } {
+  const net = round2(amountExclVat);
+  const vat = round2(net * VAT_RATE);
+  return { net, vat, total: round2(net + vat) };
+}

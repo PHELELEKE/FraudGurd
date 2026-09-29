@@ -2,13 +2,16 @@ import Link from "next/link";
 import { requirePage } from "@/lib/auth";
 import { listAlerts } from "@/lib/queries";
 import { fmtDateTime } from "@/lib/format";
-import { Amount, Empty, PageHeader, Panel, RiskTag, StatusTag } from "@/components/ui";
+import { Amount, CompanyTag, Empty, PageHeader, Panel, RiskTag, StatusTag } from "@/components/ui";
+import { CompanyFilterBar } from "@/components/CompanyFilter";
+import { parseCompanyFilter } from "@/lib/companies";
 
-export default async function AlertsPage({ searchParams }: { searchParams: Promise<{ show?: string }> }) {
+export default async function AlertsPage({ searchParams }: { searchParams: Promise<{ show?: string; company?: string }> }) {
   const user = await requirePage("/alerts");
-  const { show } = await searchParams;
+  const { show, company } = await searchParams;
   const filter = show === "all" ? "all" : "active";
-  const alerts = await listAlerts(filter);
+  const companyFilter = parseCompanyFilter(company);
+  const alerts = await listAlerts(filter, companyFilter);
 
   return (
     <>
@@ -17,15 +20,18 @@ export default async function AlertsPage({ searchParams }: { searchParams: Promi
         subtitle="Invoices the rules held back. Nothing here is proven fraud, it just needs a person to check."
         actions={
           <div className="flex gap-1 rounded-[10px] border border-line bg-panel p-1">
-            <Link href="/alerts" className={`rounded-lg px-3 py-1.5 text-[14px] ${filter === "active" ? "bg-raised font-medium" : "text-mute"}`}>
+            <Link href={{ pathname: "/alerts", query: companyFilter !== "all" ? { company: companyFilter } : {} }} className={`rounded-lg px-3 py-1.5 text-[14px] ${filter === "active" ? "bg-raised font-medium" : "text-mute"}`}>
               Needs review
             </Link>
-            <Link href="/alerts?show=all" className={`rounded-lg px-3 py-1.5 text-[14px] ${filter === "all" ? "bg-raised font-medium" : "text-mute"}`}>
+            <Link href={{ pathname: "/alerts", query: { show: "all", ...(companyFilter !== "all" ? { company: companyFilter } : {}) } }} className={`rounded-lg px-3 py-1.5 text-[14px] ${filter === "all" ? "bg-raised font-medium" : "text-mute"}`}>
               All alerts
             </Link>
           </div>
         }
       />
+      <div className="mb-4">
+        <CompanyFilterBar current={companyFilter} basePath="/alerts" extraQuery={filter === "all" ? { show: "all" } : {}} />
+      </div>
       <Panel flush>
         {alerts.length === 0 ? (
           <Empty title={filter === "active" ? "Nothing needs review" : "No alerts yet"}>
@@ -39,6 +45,7 @@ export default async function AlertsPage({ searchParams }: { searchParams: Promi
               <thead>
                 <tr>
                   <th>Alert</th>
+                  <th>Company</th>
                   <th>Invoice</th>
                   <th>Supplier</th>
                   <th className="r">Amount</th>
@@ -54,6 +61,9 @@ export default async function AlertsPage({ searchParams }: { searchParams: Promi
                     <td>
                       <div className="num font-medium">{a.ref}</div>
                       <div className="num text-[13px] text-mute">{fmtDateTime(a.created_at)}</div>
+                    </td>
+                    <td>
+                      <CompanyTag company={a.company} />
                     </td>
                     <td className="num">{a.invoice_number}</td>
                     <td>{a.supplier}</td>

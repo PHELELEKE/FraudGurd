@@ -3,14 +3,17 @@ import { requirePage } from "@/lib/auth";
 import { DEPARTMENTS, listCategories, listRequests } from "@/lib/queries";
 import { can } from "@/lib/roles";
 import { fmtDate } from "@/lib/format";
-import { Amount, Empty, PageHeader, Panel, StatusTag } from "@/components/ui";
+import { parseCompanyFilter } from "@/lib/companies";
+import { AmountExclVat, CompanyTag, Empty, PageHeader, Panel, StatusTag } from "@/components/ui";
+import { CompanyFilterBar } from "@/components/CompanyFilter";
 import { RequestForm } from "@/components/RequestForm";
 import { RequestActions } from "@/components/RequestActions";
 
-export default async function RequestsPage({ searchParams }: { searchParams: Promise<{ show?: string }> }) {
+export default async function RequestsPage({ searchParams }: { searchParams: Promise<{ show?: string; company?: string }> }) {
   const user = await requirePage("/requests");
-  const { show } = await searchParams;
-  const [all, categories] = await Promise.all([listRequests(user), listCategories()]);
+  const { show, company } = await searchParams;
+  const companyFilter = parseCompanyFilter(company);
+  const [all, categories] = await Promise.all([listRequests(user, companyFilter), listCategories()]);
   const canCreate = can(user.role, "request.create");
   const canDecide = can(user.role, "request.decide");
 
@@ -22,12 +25,14 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
   const view = canDecide && show !== "all" ? "queue" : "all";
   const rows = view === "queue" ? all.filter(mine) : all;
   const queueCount = all.filter(mine).length;
+  const extraQuery: Record<string, string> = view === "all" ? { show: "all" } : {};
 
   const form = (
     <RequestForm
       categories={categories.map((c) => c.category)}
       departments={[...DEPARTMENTS]}
       defaultDepartment={(DEPARTMENTS as readonly string[]).includes(user.department) ? user.department : "Admin"}
+      defaultCompany="small_civils"
     />
   );
 
@@ -37,7 +42,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
         title={user.role === "employee" ? "My requests" : canDecide ? "Requests" : "All requests"}
         subtitle={
           user.role === "employee"
-            ? "Ask for what you need. A manager approves it before anything is ordered."
+            ? "Ask for what you need. A manager approves it before anything is ordered. Amounts are entered excluding VAT."
             : user.role === "manager"
               ? "Approve or reject what your team asks for. You can never decide your own request."
               : user.role === "finance_manager"
@@ -47,10 +52,10 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
         actions={
           canDecide ? (
             <div className="flex gap-1 rounded-[10px] border border-line bg-panel p-1">
-              <Link href="/requests" className={`rounded-lg px-3 py-1.5 text-[14px] ${view === "queue" ? "bg-raised font-medium" : "text-mute"}`}>
+              <Link href={{ pathname: "/requests", query: companyFilter !== "all" ? { company: companyFilter } : {} }} className={`rounded-lg px-3 py-1.5 text-[14px] ${view === "queue" ? "bg-raised font-medium" : "text-mute"}`}>
                 Waiting for me{queueCount > 0 ? ` (${queueCount})` : ""}
               </Link>
-              <Link href="/requests?show=all" className={`rounded-lg px-3 py-1.5 text-[14px] ${view === "all" ? "bg-raised font-medium" : "text-mute"}`}>
+              <Link href={{ pathname: "/requests", query: { show: "all", ...(companyFilter !== "all" ? { company: companyFilter } : {}) } }} className={`rounded-lg px-3 py-1.5 text-[14px] ${view === "all" ? "bg-raised font-medium" : "text-mute"}`}>
                 All requests
               </Link>
             </div>
@@ -58,9 +63,13 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
         }
       />
 
+      <div className="mb-4">
+        <CompanyFilterBar current={companyFilter} basePath="/requests" extraQuery={extraQuery} />
+      </div>
+
       <div className={`grid gap-4 ${user.role === "employee" ? "lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]" : ""}`}>
         {user.role === "employee" && (
-          <Panel title="New request" subtitle="Tell us what you need and why.">
+          <Panel title="New request" subtitle="Tell us what you need, why, and which company it is for.">
             {form}
           </Panel>
         )}
@@ -94,8 +103,9 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
                   <thead>
                     <tr>
                       <th>Request</th>
+                      <th>Company</th>
                       <th className="r">Qty</th>
-                      <th className="r">Estimate</th>
+                      <th className="r">Estimate (excl. VAT)</th>
                       {user.role !== "employee" && <th>Requested by</th>}
                       <th>Status</th>
                       {canDecide && <th></th>}
@@ -104,7 +114,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
                   <tbody>
                     {rows.map((r) => (
                       <tr key={r.id}>
-                        <td className="max-w-[320px]">
+                        <td className="max-w-[280px]">
                           <div className="font-medium">{r.item}</div>
                           <div className="num text-[13px] text-mute">
                             {r.ref}, {r.category}, {r.department}, {fmtDate(r.created_at)}
@@ -112,9 +122,12 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
                           {r.status === "pending" && <div className="mt-1 text-[13px] text-mute">Reason: {r.reason}</div>}
                           {r.decision_note && <div className="mt-1 text-[13px] text-mute">Note: {r.decision_note}</div>}
                         </td>
+                        <td>
+                          <CompanyTag company={r.company} />
+                        </td>
                         <td className="num r">{r.quantity}</td>
                         <td className="r">
-                          <Amount value={r.estimated_cost} />
+                          <AmountExclVat value={r.estimated_cost} />
                         </td>
                         {user.role !== "employee" && <td>{r.requester}</td>}
                         <td>

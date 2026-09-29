@@ -3,20 +3,27 @@ import { requirePage } from "@/lib/auth";
 import { listInvoices, listReadyToInvoice, type InvoiceRow } from "@/lib/queries";
 import { can } from "@/lib/roles";
 import { fmtDate, rand } from "@/lib/format";
-import { Amount, Empty, PageHeader, Panel, RiskTag, StatusTag } from "@/components/ui";
+import { parseCompanyFilter } from "@/lib/companies";
+import { AmountVat, CompanyTag, Empty, PageHeader, Panel, RiskTag, StatusTag } from "@/components/ui";
+import { CompanyFilterBar } from "@/components/CompanyFilter";
 import { PayButton } from "@/components/actions";
 
-export default async function InvoicesPage() {
+export default async function InvoicesPage({ searchParams }: { searchParams: Promise<{ company?: string }> }) {
   const user = await requirePage("/invoices");
+  const { company } = await searchParams;
+  const companyFilter = parseCompanyFilter(company);
   const canCapture = can(user.role, "invoice.capture");
   const canPay = can(user.role, "invoice.pay");
-  const invoices = await listInvoices(100);
+  const invoices = await listInvoices(100, companyFilter);
 
   if (!canCapture) {
     // Finance Manager and Auditor: a plain read-only list of every invoice.
     return (
       <>
         <PageHeader title="Supplier invoices" subtitle="Low-risk invoices are approved automatically. Everything else is held until the Finance Manager decides." />
+        <div className="mb-4">
+          <CompanyFilterBar current={companyFilter} basePath="/invoices" />
+        </div>
         <Panel flush>
           <InvoiceTable rows={invoices} />
         </Panel>
@@ -25,7 +32,7 @@ export default async function InvoicesPage() {
   }
 
   // Accountant: a work list, in the order the work happens.
-  const ready = await listReadyToInvoice();
+  const ready = await listReadyToInvoice(companyFilter);
   const toPay = invoices.filter((i) => i.status === "approved");
   const held = invoices.filter((i) => i.status === "held");
   const history = invoices.filter((i) => i.status === "paid" || i.status === "rejected").slice(0, 15);
@@ -43,6 +50,10 @@ export default async function InvoicesPage() {
         }
       />
 
+      <div className="mb-4">
+        <CompanyFilterBar current={companyFilter} basePath="/invoices" />
+      </div>
+
       <div className="space-y-4">
         <Panel
           title="Ready to pay"
@@ -57,6 +68,7 @@ export default async function InvoicesPage() {
                 <thead>
                   <tr>
                     <th>Invoice</th>
+                    <th>Company</th>
                     <th>Supplier</th>
                     <th>Purchase order</th>
                     <th className="r">Amount</th>
@@ -71,10 +83,13 @@ export default async function InvoicesPage() {
                         <div className="num font-medium">{i.invoice_number}</div>
                         <div className="num text-[13px] text-mute">{i.ref}</div>
                       </td>
+                      <td>
+                        <CompanyTag company={i.company} />
+                      </td>
                       <td>{i.supplier}</td>
                       <td className="num">{i.po_ref}</td>
                       <td className="r">
-                        <Amount value={i.total} className="font-medium" />
+                        <AmountVat value={i.total} className="font-medium" />
                       </td>
                       <td>
                         <RiskTag score={i.risk_score} band={i.risk_band} />
@@ -97,6 +112,7 @@ export default async function InvoicesPage() {
                 <thead>
                   <tr>
                     <th>Purchase order</th>
+                    <th>Company</th>
                     <th>Supplier</th>
                     <th>Delivered</th>
                     <th className="r">Expected amount</th>
@@ -110,12 +126,15 @@ export default async function InvoicesPage() {
                         <div className="font-medium">{p.item}</div>
                         <div className="num text-[13px] text-mute">{p.ref}</div>
                       </td>
+                      <td>
+                        <CompanyTag company={p.company} />
+                      </td>
                       <td>{p.supplier}</td>
                       <td className="num">
                         {p.received} of {p.quantity} units, {fmtDate(p.delivered_at)}
                       </td>
                       <td className="r">
-                        <Amount value={p.received * p.unit_price} />
+                        <AmountVat value={p.received * p.unit_price} />
                       </td>
                       <td className="r">
                         <Link href={`/invoices/new?po=${p.id}`} className="btn btn-sm btn-primary">
@@ -152,6 +171,7 @@ function InvoiceTable({ rows }: { rows: InvoiceRow[] }) {
         <thead>
           <tr>
             <th>Invoice</th>
+            <th>Company</th>
             <th>Supplier</th>
             <th>Purchase order</th>
             <th className="r">Amount</th>
@@ -170,10 +190,13 @@ function InvoiceTable({ rows }: { rows: InvoiceRow[] }) {
                   {i.ref}, dated {fmtDate(i.invoice_date)}
                 </div>
               </td>
+              <td>
+                <CompanyTag company={i.company} />
+              </td>
               <td>{i.supplier}</td>
               <td className="num">{i.po_ref}</td>
               <td className="r">
-                <Amount value={i.total} />
+                <AmountVat value={i.total} />
               </td>
               <td>
                 <RiskTag score={i.risk_score} band={i.risk_band} />

@@ -1,23 +1,37 @@
 "use client";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { post, useAction, ErrorNote } from "./api";
 import { Field } from "./ui";
+import { addVat } from "@/lib/money";
+import { rand } from "@/lib/format";
+import { COMPANIES, COMPANY_LABEL, COMPANY_COLOR, type Company } from "@/lib/companies";
 
 export function RequestForm({
   categories,
   departments,
   defaultDepartment,
+  defaultCompany,
 }: {
   categories: string[];
   departments: string[];
   defaultDepartment: string;
+  defaultCompany: Company;
 }) {
-  const empty = { item: "", category: categories[0] ?? "", quantity: "1", estimatedCost: "", department: defaultDepartment, reason: "" };
+  const empty = {
+    item: "",
+    category: categories[0] ?? "",
+    quantity: "1",
+    estimatedCost: "",
+    department: defaultDepartment,
+    reason: "",
+    company: defaultCompany as string,
+  };
   const [f, setF] = useState(empty);
   const [done, setDone] = useState<string | null>(null);
   const { run, busy, error } = useAction();
   const set = (k: keyof typeof empty) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setF((p) => ({ ...p, [k]: e.target.value }));
+  const vat = useMemo(() => addVat(Number(f.estimatedCost) || 0), [f.estimatedCost]);
 
   return (
     <form
@@ -32,6 +46,20 @@ export function RequestForm({
         }
       }}
     >
+      <Field label="Company">
+        <select className="input" value={f.company} onChange={set("company")}>
+          {COMPANIES.map((c) => (
+            <option key={c} value={c}>
+              {COMPANY_LABEL[c]}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <div className="flex items-center gap-2 text-[13px] text-mute">
+        <span className="company-dot" style={{ background: COMPANY_COLOR[f.company as Company] }} />
+        This request will belong to {COMPANY_LABEL[f.company as Company]}.
+      </div>
+
       <Field label="What do you need?">
         <input className="input" required maxLength={120} placeholder="For example: 10 x Laptops" value={f.item} onChange={set("item")} />
       </Field>
@@ -39,10 +67,15 @@ export function RequestForm({
         <Field label="Quantity">
           <input className="input num" type="number" min={1} step={1} required value={f.quantity} onChange={set("quantity")} />
         </Field>
-        <Field label="Estimated cost (R)">
+        <Field label="Estimated cost (R, excl. VAT)">
           <input className="input num" type="number" min={0.01} step="0.01" required value={f.estimatedCost} onChange={set("estimatedCost")} />
         </Field>
       </div>
+      {Number(f.estimatedCost) > 0 && (
+        <p className="num -mt-2 text-[13px] text-mute">
+          + VAT {rand(vat.vat)} = {rand(vat.total)} incl. VAT
+        </p>
+      )}
       <div className="grid grid-cols-2 gap-3">
         <Field label="Category">
           <select className="input" value={f.category} onChange={set("category")}>

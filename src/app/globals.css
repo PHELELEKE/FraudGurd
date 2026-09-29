@@ -339,3 +339,50 @@ details > summary::-webkit-details-marker {
 .table tbody tr:hover td {
   background: rgba(255, 255, 255, 0.025);
 }
+
+/* ---------- company chips: neutral background, only a small coloured dot, name always spelled out ---------- */
+.company-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 7px;
+  background: var(--color-raised);
+  border: 1px solid var(--color-line);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-ink);
+  white-space: nowrap;
+}
+.company-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* segmented company filter control, reused on every list page */
+.company-filter {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  border: 1px solid var(--color-line);
+  background: var(--color-panel);
+}
+.company-filter a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 7px;
+  font-size: 14px;
+  color: var(--color-mute);
+  white-space: nowrap;
+}
+.company-filter a[aria-current="page"] {
+  background: var(--color-raised);
+  color: var(--color-ink);
+  font-weight: 500;
+}

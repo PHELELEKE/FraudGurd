@@ -156,3 +156,15 @@ create table if not exists audit_log (
   details    jsonb not null default '{}'::jsonb
 );
 create index if not exists audit_log_at_idx on audit_log (at desc);
+
+-- Small Civils and VZ Coatings: one business, two companies. Added so every request, order,
+-- invoice and audit entry says which company it belongs to. Safe to run again: existing rows
+-- default to Small Civils and can be corrected afterwards.
+alter table purchase_requests add column if not exists company text not null default 'small_civils' check (company in ('small_civils','vz_coatings'));
+alter table purchase_orders   add column if not exists company text not null default 'small_civils' check (company in ('small_civils','vz_coatings'));
+alter table invoices          add column if not exists company text not null default 'small_civils' check (company in ('small_civils','vz_coatings'));
+alter table audit_log         add column if not exists company text check (company in ('small_civils','vz_coatings'));
+create index if not exists purchase_requests_company_idx on purchase_requests (company);
+create index if not exists purchase_orders_company_idx on purchase_orders (company);
+create index if not exists invoices_company_idx on invoices (company);
+create index if not exists audit_log_company_idx on audit_log (company);

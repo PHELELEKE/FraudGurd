@@ -1,11 +1,15 @@
 import { requirePage } from "@/lib/auth";
 import { getJournal } from "@/lib/queries";
 import { fmtDateTime, rand } from "@/lib/format";
-import { Empty, PageHeader, Panel, Tag } from "@/components/ui";
+import { CompanyTag, Empty, PageHeader, Panel, Tag } from "@/components/ui";
+import { CompanyFilterBar } from "@/components/CompanyFilter";
+import { parseCompanyFilter } from "@/lib/companies";
 
-export default async function JournalPage() {
+export default async function JournalPage({ searchParams }: { searchParams: Promise<{ company?: string }> }) {
   await requirePage("/journal");
-  const { entries, balances } = await getJournal();
+  const { company } = await searchParams;
+  const companyFilter = parseCompanyFilter(company);
+  const { entries, balances } = await getJournal(companyFilter);
   const totalDebit = balances.reduce((s, b) => s + b.debit, 0);
   const totalCredit = balances.reduce((s, b) => s + b.credit, 0);
   const balanced = Math.round(totalDebit * 100) === Math.round(totalCredit * 100);
@@ -16,6 +20,9 @@ export default async function JournalPage() {
         title="Journal"
         subtitle="Entries are posted automatically. Invoices are VAT-inclusive, so each one splits into the cost, VAT Input and Accounts Payable."
       />
+      <div className="mb-4">
+        <CompanyFilterBar current={companyFilter} basePath="/journal" />
+      </div>
       <div className="space-y-4">
         <Panel
           title="Account totals"
@@ -67,9 +74,10 @@ export default async function JournalPage() {
               {entries.map((e) => (
                 <li key={e.id} className="px-6 py-4">
                   <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-                    <div>
+                    <div className="flex flex-wrap items-center gap-3">
                       <span className="num font-medium">{e.ref}</span>
-                      <span className="ml-3">{e.description}</span>
+                      {e.company && <CompanyTag company={e.company} />}
+                      <span>{e.description}</span>
                     </div>
                     <div className="num text-[13px] text-mute">
                       {fmtDateTime(e.posted_at)}

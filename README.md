@@ -69,6 +69,15 @@ You need Node.js 20 or newer.
 
 Roles are enforced on the server for every action (`src/lib/p2p.ts`), not just by hiding buttons.
 
+## Small Civils and VZ Coatings
+
+The business behind this prototype is run as two companies sharing one set of staff, suppliers and system: **Small Civils** and **VZ Coatings**. Every purchase request, order, invoice, alert and journal entry belongs to one of the two, shown everywhere as a small coloured chip (a gold dot for Small Civils, a blue dot for VZ Coatings, with the name always spelled out next to it).
+
+- An employee chooses the company when making a request.
+- A purchase order and an invoice default to the same company as the step before them, but Procurement and the Accountant can change it. This is how a project that started under one company can carry on under the other, for example when Small Civils raises the request but VZ Coatings ends up paying.
+- Every list page (Requests, Orders, Invoices, Alerts, Journal, Audit trail, Dashboard) has an "All companies / Small Civils / VZ Coatings" filter, so each person can see everything or just their own company's work.
+- Suppliers, categories and users are shared between the two companies, since it is one back-office running both.
+
 ## The fraud rules
 
 Each rule that fires adds points. The total is capped at 100.
@@ -90,7 +99,14 @@ Each rule that fires adds points. The total is capped at 100.
 
 The points and thresholds are constants at the top of `src/lib/rules.ts`. Two controls are preventive instead of scored: nobody can approve their own request, and a held invoice cannot be paid until its alert is resolved.
 
-## Accounting
+## Accounting and VAT
+
+Every amount in the system shows VAT alongside it, in two directions:
+
+- **A purchase request's estimated cost is entered excluding VAT** (the way a rough estimate is normally given). The screen adds 15% on top and shows the result, for example an estimate of R17,000 shows "+ VAT R2,550.00 = R19,550.00 incl. VAT" right under the field as you type, and the same breakdown appears on every request in the list.
+- **Purchase order and invoice amounts are VAT-inclusive**, since that is what a real supplier invoice states. Wherever one of these totals is shown (orders, invoices, alerts, the dashboard), a small line underneath it states how much of that total is VAT, worked out by dividing by 1.15.
+
+The 15% rate is one constant, `VAT_RATE` in `src/lib/money.ts`.
 
 Invoice amounts are VAT-inclusive at 15%. When an invoice is approved:
 

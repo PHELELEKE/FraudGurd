@@ -2,12 +2,20 @@ import { requirePage } from "@/lib/auth";
 import { listApprovedRequests, listOrders, listSuppliers } from "@/lib/queries";
 import { can } from "@/lib/roles";
 import { fmtDate } from "@/lib/format";
-import { Amount, Empty, PageHeader, Panel, StatusTag, Tag } from "@/components/ui";
+import { parseCompanyFilter } from "@/lib/companies";
+import { Amount, AmountVat, CompanyTag, Empty, PageHeader, Panel, StatusTag, Tag } from "@/components/ui";
+import { CompanyFilterBar } from "@/components/CompanyFilter";
 import { CreateOrderRow, ReceiveGoodsForm } from "@/components/actions";
 
-export default async function OrdersPage() {
+export default async function OrdersPage({ searchParams }: { searchParams: Promise<{ company?: string }> }) {
   const user = await requirePage("/orders");
-  const [approved, orders, suppliers] = await Promise.all([listApprovedRequests(), listOrders(), listSuppliers()]);
+  const { company } = await searchParams;
+  const companyFilter = parseCompanyFilter(company);
+  const [approved, orders, suppliers] = await Promise.all([
+    listApprovedRequests(companyFilter),
+    listOrders(companyFilter),
+    listSuppliers(),
+  ]);
   const canOrder = can(user.role, "order.create");
   const canReceive = can(user.role, "goods.receive");
 
@@ -15,8 +23,12 @@ export default async function OrdersPage() {
     <>
       <PageHeader
         title="Orders and deliveries"
-        subtitle="Procurement turns approved requests into purchase orders and records what actually arrives."
+        subtitle="Procurement turns approved requests into purchase orders and records what actually arrives. A project can move to the other company here if it needs to."
       />
+
+      <div className="mb-4">
+        <CompanyFilterBar current={companyFilter} basePath="/orders" />
+      </div>
 
       <div className="space-y-4">
         <Panel title="Approved requests waiting for a purchase order" flush={approved.length === 0}>
@@ -33,8 +45,11 @@ export default async function OrdersPage() {
                         {r.ref}, {r.category}, requested by {r.requester}
                       </span>
                     </div>
-                    <div className="num text-[14px] text-mute">
-                      {r.quantity} units, estimate <Amount value={r.estimated_cost} className="text-ink" />
+                    <div className="flex items-center gap-3">
+                      <CompanyTag company={r.company} />
+                      <span className="num text-[14px] text-mute">
+                        {r.quantity} units, estimate <Amount value={r.estimated_cost} className="text-ink" /> excl. VAT
+                      </span>
                     </div>
                   </div>
                   {canOrder ? (
@@ -42,6 +57,7 @@ export default async function OrdersPage() {
                       requestId={r.id}
                       quantity={r.quantity}
                       estimatedUnit={Math.round((r.estimated_cost / r.quantity) * 100) / 100}
+                      requestCompany={r.company}
                       suppliers={suppliers.map((s) => ({ id: s.id, name: s.name, status: s.status }))}
                     />
                   ) : (
@@ -62,6 +78,7 @@ export default async function OrdersPage() {
                 <thead>
                   <tr>
                     <th>Purchase order</th>
+                    <th>Company</th>
                     <th>Supplier</th>
                     <th className="r">Unit price</th>
                     <th className="r">Total</th>
@@ -80,6 +97,10 @@ export default async function OrdersPage() {
                         </div>
                       </td>
                       <td>
+                        <CompanyTag company={o.company} />
+                        {o.company !== o.request_company && <div className="mt-1 text-[12px] text-mid">Moved from {o.request_company === "small_civils" ? "Small Civils" : "VZ Coatings"}</div>}
+                      </td>
+                      <td>
                         {o.supplier}
                         {o.supplier_status === "pending" && (
                           <span className="ml-2">
@@ -91,7 +112,7 @@ export default async function OrdersPage() {
                         <Amount value={o.unit_price} />
                       </td>
                       <td className="r">
-                        <Amount value={o.total} />
+                        <AmountVat value={o.total} />
                       </td>
                       <td className="num">
                         {o.received} of {o.quantity}

@@ -37,6 +37,7 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
           total: o.total,
           received: o.received,
           status: o.status,
+          company: o.company,
           bank: { bankName: o.bank_name, accountHolder: o.account_holder, accountNumber: o.account_number, branchCode: o.branch_code },
         }))}
       />

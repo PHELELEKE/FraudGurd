@@ -11,6 +11,7 @@ import { withTx } from "./db";
 import { HttpError } from "./http";
 import { ACCOUNTS } from "./accounts";
 import { splitVat } from "./money";
+import type { Company } from "./companies";
 import { rand } from "./format";
 import { can, ROLE_LABEL, type Perm, type Role } from "./roles";
 import { scoreInvoice, DUPLICATE_AMOUNT_WINDOW_DAYS, FREQUENT_WINDOW_DAYS, type RuleResult } from "./rules";
@@ -36,12 +37,13 @@ async function audit(
   action: string,
   entity: string,
   ref: string | null,
-  details: Record<string, unknown> = {}
+  details: Record<string, unknown> = {},
+  company: Company | null = null
 ) {
   await c.query(
-    `insert into audit_log (user_id, user_name, user_role, action, entity, entity_ref, details)
-     values ($1, $2, $3, $4, $5, $6, $7)`,
-    [a.id, a.name, a.role, action, entity, ref, JSON.stringify(details)]
+    `insert into audit_log (user_id, user_name, user_role, action, entity, entity_ref, details, company)
+     values ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [a.id, a.name, a.role, action, entity, ref, JSON.stringify(details), company]
   );
 }
 
@@ -57,16 +59,17 @@ export async function createRequest(a: Actor, body: Body) {
   const estimatedCost = v.money(body.estimatedCost, "Estimated cost");
   const department = v.str(body.department, "Department", 60);
   const reason = v.str(body.reason, "Reason", 300);
+  const co = v.company(body.company);
 
   return withTx(async (c) => {
     const cat = await c.query("select 1 from category_norms where category = $1", [category]);
     if (!cat.rowCount) throw new HttpError(400, "Choose one of the listed categories.");
     const { rows } = await c.query(
-      `insert into purchase_requests (requester_id, department, category, item, quantity, estimated_cost, reason)
-       values ($1, $2, $3, $4, $5, $6, $7) returning id, ref`,
-      [a.id, department, category, item, quantity, estimatedCost, reason]
+      `insert into purchase_requests (requester_id, department, category, item, quantity, estimated_cost, reason, company)
+       values ($1, $2, $3, $4, $5, $6, $7, $8) returning id, ref`,
+      [a.id, department, category, item, quantity, estimatedCost, reason, co]
     );
-    await audit(c, a, "request.created", "purchase_request", rows[0].ref, { item, quantity, estimatedCost, category });
+    await audit(c, a, "request.created", "purchase_request", rows[0].ref, { item, quantity, estimatedCost, category }, co);
     return rows[0] as { id: number; ref: string };
   });
 }
@@ -174,6 +177,9 @@ export async function createOrder(a: Actor, body: Body) {
   const requestId = v.int(body.requestId, "Request");
   const supplierId = v.int(body.supplierId, "Supplier");
   const unitPrice = v.money(body.unitPrice, "Unit price");
+  // A purchase order usually stays with the company that requested it, but the same project
+  // can carry on under the other company, so Procurement can choose a different one here.
+  const co = body.company !== undefined ? v.company(body.company) : undefined;
 
   return withTx(async (c) => {
     const { rows } = await c.query("select * from purchase_requests where id = $1 for update", [requestId]);
@@ -183,19 +189,22 @@ export async function createOrder(a: Actor, body: Body) {
     const sup = await c.query("select name from suppliers where id = $1", [supplierId]);
     if (!sup.rowCount) throw new HttpError(400, "Choose a supplier from the list.");
     const total = Math.round(r.quantity * unitPrice * 100) / 100;
+    const company = co ?? (r.company as Company);
     const po = await c.query(
-      `insert into purchase_orders (request_id, supplier_id, quantity, unit_price, total, created_by)
-       values ($1, $2, $3, $4, $5, $6) returning id, ref`,
-      [requestId, supplierId, r.quantity, unitPrice, total, a.id]
+      `insert into purchase_orders (request_id, supplier_id, quantity, unit_price, total, created_by, company)
+       values ($1, $2, $3, $4, $5, $6, $7) returning id, ref`,
+      [requestId, supplierId, r.quantity, unitPrice, total, a.id, company]
     );
     await c.query("update purchase_requests set status = 'ordered' where id = $1", [requestId]);
-    await audit(c, a, "order.created", "purchase_order", po.rows[0].ref, {
-      request: r.ref,
-      supplier: sup.rows[0].name,
-      quantity: r.quantity,
-      unitPrice,
-      total,
-    });
+    await audit(
+      c,
+      a,
+      "order.created",
+      "purchase_order",
+      po.rows[0].ref,
+      { request: r.ref, supplier: sup.rows[0].name, quantity: r.quantity, unitPrice, total, changedCompany: company !== r.company },
+      company
+    );
     return po.rows[0] as { id: number; ref: string };
   });
 }
@@ -221,7 +230,7 @@ export async function receiveGoods(a: Actor, poId: number, body: Body) {
     if (already + quantity === po.quantity && po.status === "issued") {
       await c.query("update purchase_orders set status = 'received' where id = $1", [poId]);
     }
-    await audit(c, a, "goods.received", "goods_received", grn.rows[0].ref, { po: po.ref, quantity, notes });
+    await audit(c, a, "goods.received", "goods_received", grn.rows[0].ref, { po: po.ref, quantity, notes }, po.company);
     return grn.rows[0] as { id: number; ref: string };
   });
 }
@@ -263,6 +272,9 @@ export async function captureInvoice(a: Actor, body: Body): Promise<CaptureOutco
     );
     const po = rows[0];
     if (!po) throw new HttpError(404, "Purchase order not found.");
+    // An invoice usually carries the purchase order's company, but a project that moved from
+    // one company to the other partway through can be invoiced under the new one.
+    const company: Company = body.company !== undefined ? v.company(body.company) : (po.company as Company);
 
     const grn = await c.query("select coalesce(sum(quantity), 0)::int as qty from goods_received where po_id = $1", [poId]);
     const receivedQty = grn.rows[0].qty as number;
@@ -308,21 +320,29 @@ export async function captureInvoice(a: Actor, body: Body): Promise<CaptureOutco
     const inv = await c.query(
       `insert into invoices (po_id, supplier_id, invoice_number, invoice_date, quantity, unit_price, total,
                              bank_name, account_holder, account_number, branch_code, captured_by,
-                             match_status, risk_score, risk_band, status)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) returning id, ref`,
+                             match_status, risk_score, risk_band, status, company)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) returning id, ref`,
       [
         poId, po.supplier_id, invoiceNumber, invoiceDate, quantity, unitPrice, total,
         b.bankName, b.accountHolder, b.accountNumber, b.branchCode, a.id,
-        result.match.ok ? "matched" : "mismatch", result.score, result.band, status,
+        result.match.ok ? "matched" : "mismatch", result.score, result.band, status, company,
       ]
     );
     const invoice = inv.rows[0] as { id: number; ref: string };
     await c.query("update purchase_orders set status = 'invoiced' where id = $1 and status <> 'paid'", [poId]);
 
-    await audit(c, a, "invoice.captured", "invoice", invoice.ref, {
-      invoiceNumber, po: po.ref, total, score: result.score, band: result.band,
-      rules: result.reasons.map((r) => r.code),
-    });
+    await audit(
+      c,
+      a,
+      "invoice.captured",
+      "invoice",
+      invoice.ref,
+      {
+        invoiceNumber, po: po.ref, total, score: result.score, band: result.band,
+        rules: result.reasons.map((r) => r.code), changedCompany: company !== po.company,
+      },
+      company
+    );
 
     let alertId: number | null = null;
     if (flagged) {
@@ -344,9 +364,11 @@ export async function captureInvoice(a: Actor, body: Body): Promise<CaptureOutco
         [invoice.id, result.score, result.band, JSON.stringify(result.reasons), JSON.stringify(snapshot)]
       );
       alertId = al.rows[0].id;
-      await audit(c, a, "alert.raised", "alert", al.rows[0].ref, {
-        invoice: invoice.ref, score: result.score, band: result.band,
-      });
+      await audit(
+        c, a, "alert.raised", "alert", al.rows[0].ref,
+        { invoice: invoice.ref, score: result.score, band: result.band },
+        company
+      );
     } else {
       await postInvoiceJournal(c, a, {
         invoiceId: invoice.id,
@@ -356,7 +378,7 @@ export async function captureInvoice(a: Actor, body: Body): Promise<CaptureOutco
         ledgerAccount: po.ledger_account,
         total,
       });
-      await audit(c, a, "invoice.approved", "invoice", invoice.ref, { by: "system", reason: "low risk" });
+      await audit(c, a, "invoice.approved", "invoice", invoice.ref, { by: "system", reason: "low risk" }, company);
     }
 
     return { invoiceId: invoice.id, invoiceRef: invoice.ref, alertId, outcome: status, result };
@@ -412,7 +434,7 @@ export async function resolveAlert(a: Actor, alertId: number, body: Body) {
   return withTx(async (c) => {
     const { rows } = await c.query(
       `select al.*, i.ref as invoice_ref, i.invoice_number, i.total, i.po_id, i.status as invoice_status,
-              s.name as supplier_name, n.ledger_account
+              i.company, s.name as supplier_name, n.ledger_account
          from alerts al
          join invoices i on i.id = al.invoice_id
          join suppliers s on s.id = i.supplier_id
@@ -430,7 +452,7 @@ export async function resolveAlert(a: Actor, alertId: number, body: Body) {
 
     if (decision === "escalate") {
       await c.query("update alerts set status = 'escalated', comment = $1 where id = $2", [comment, alertId]);
-      await audit(c, a, "alert.escalated", "alert", al.ref, { invoice: al.invoice_ref, comment });
+      await audit(c, a, "alert.escalated", "alert", al.ref, { invoice: al.invoice_ref, comment }, al.company);
       return { status: "escalated" };
     }
 
@@ -448,7 +470,7 @@ export async function resolveAlert(a: Actor, alertId: number, body: Body) {
         ledgerAccount: al.ledger_account,
         total: al.total,
       });
-      await audit(c, a, "alert.cleared", "alert", al.ref, { invoice: al.invoice_ref, comment });
+      await audit(c, a, "alert.cleared", "alert", al.ref, { invoice: al.invoice_ref, comment }, al.company);
       return { status: "cleared" };
     }
 
@@ -465,7 +487,7 @@ export async function resolveAlert(a: Actor, alertId: number, body: Body) {
        where id = $1 and status = 'invoiced'`,
       [al.po_id]
     );
-    await audit(c, a, "alert.rejected", "alert", al.ref, { invoice: al.invoice_ref, comment });
+    await audit(c, a, "alert.rejected", "alert", al.ref, { invoice: al.invoice_ref, comment }, al.company);
     return { status: "rejected" };
   });
 }
@@ -478,6 +500,7 @@ export async function payInvoice(a: Actor, invoiceId: number) {
         where i.id = $1 for update of i`,
       [invoiceId]
     );
+    // i.company comes along on the row already (select i.*), used below to tag the payment audit entry.
     const inv = rows[0];
     if (!inv) throw new HttpError(404, "Invoice not found.");
     if (inv.status === "held") throw new HttpError(409, "Payment is held until the Finance Manager resolves the alert.");
@@ -490,7 +513,7 @@ export async function payInvoice(a: Actor, invoiceId: number) {
       { account: ACCOUNTS.payable, debit: inv.total, credit: 0 },
       { account: ACCOUNTS.bank, debit: 0, credit: inv.total },
     ]);
-    await audit(c, a, "invoice.paid", "invoice", inv.ref, { amount: rand(inv.total) });
+    await audit(c, a, "invoice.paid", "invoice", inv.ref, { amount: rand(inv.total) }, inv.company);
     return { ok: true };
   });
 }

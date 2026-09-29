@@ -69,12 +69,13 @@ const stamp = Date.now();
 const cents = (stamp % 997) / 100; // makes every run's amounts different
 
 /** Request -> approve -> PO -> goods received. Returns the PO id. */
-async function buildPo(o: { thandi: Client; mpho: Client; john: Client; supplierId: number; category: string; item: string; qty: number; unitPrice: number; dept: string }) {
-  const rq = await o.thandi.post("/api/requests", { item: o.item, category: o.category, quantity: o.qty, estimatedCost: o.qty * o.unitPrice, department: o.dept, reason: "End-to-end test" });
+async function buildPo(o: { thandi: Client; mpho: Client; john: Client; supplierId: number; category: string; item: string; qty: number; unitPrice: number; dept: string; company?: string; orderCompany?: string }) {
+  const company = o.company ?? "small_civils";
+  const rq = await o.thandi.post("/api/requests", { item: o.item, category: o.category, quantity: o.qty, estimatedCost: o.qty * o.unitPrice, department: o.dept, reason: "End-to-end test", company });
   const ap = await o.mpho.post(`/api/requests/${rq.data.id}/decision`, { decision: "approved", note: "ok" });
-  const po = await o.john.post("/api/orders", { requestId: rq.data.id, supplierId: o.supplierId, unitPrice: o.unitPrice });
+  const po = await o.john.post("/api/orders", { requestId: rq.data.id, supplierId: o.supplierId, unitPrice: o.unitPrice, ...(o.orderCompany ? { company: o.orderCompany } : {}) });
   const gr = await o.john.post(`/api/orders/${po.data.id}/receive`, { quantity: o.qty });
-  return { rq, ap, po, gr, poId: po.data.id as number };
+  return { rq, ap, po, gr, poId: po.data.id as number, company: o.orderCompany ?? company };
 }
 
 async function main() {
@@ -192,7 +193,7 @@ async function main() {
 
   /* ------------------------------------------------------------ */
   section("Scenario 4: separation of duties");
-  const own = await mpho.post("/api/requests", { item: `E2E own request ${stamp}`, category: "IT Equipment", quantity: 1, estimatedCost: 5000, department: "IT", reason: "Testing" });
+  const own = await mpho.post("/api/requests", { item: `E2E own request ${stamp}`, category: "IT Equipment", quantity: 1, estimatedCost: 5000, department: "IT", reason: "Testing", company: "small_civils" });
   check("a manager can make a request", own.status === 200, own);
   const self = await mpho.post(`/api/requests/${own.data.id}/decision`, { decision: "approved", note: "me" });
   check("a manager cannot approve their own request (403)", self.status === 403 && /own/i.test(self.data.error), self);
@@ -202,11 +203,11 @@ async function main() {
   check("an employee cannot approve requests (403)", empDecide.status === 403, empDecide);
   const empOrder = await thandi.post("/api/orders", { requestId: own.data.id, supplierId: abc.id, unitPrice: 5000 });
   check("an employee cannot create purchase orders (403)", empOrder.status === 403, empOrder);
-  const audReq = await pieter.post("/api/requests", { item: "x", category: "IT Equipment", quantity: 1, estimatedCost: 1, department: "IT", reason: "x" });
+  const audReq = await pieter.post("/api/requests", { item: "x", category: "IT Equipment", quantity: 1, estimatedCost: 1, department: "IT", reason: "x", company: "small_civils" });
   check("an auditor cannot make requests (403)", audReq.status === 403, audReq);
-  const badCat = await thandi.post("/api/requests", { item: "x", category: "Not a category", quantity: 1, estimatedCost: 10, department: "IT", reason: "x" });
+  const badCat = await thandi.post("/api/requests", { item: "x", category: "Not a category", quantity: 1, estimatedCost: 10, department: "IT", reason: "x", company: "small_civils" });
   check("an unknown category is refused (400)", badCat.status === 400, badCat);
-  const negQty = await thandi.post("/api/requests", { item: "x", category: "IT Equipment", quantity: -3, estimatedCost: 10, department: "IT", reason: "x" });
+  const negQty = await thandi.post("/api/requests", { item: "x", category: "IT Equipment", quantity: -3, estimatedCost: 10, department: "IT", reason: "x", company: "small_civils" });
   check("a negative quantity is refused (400)", negQty.status === 400, negQty);
 
   /* ------------------------------------------------------------ */
@@ -233,6 +234,61 @@ async function main() {
   check("the old bank details are kept in history", hist.n === 1, hist);
 
   /* ------------------------------------------------------------ */
+  section("Small Civils and VZ Coatings");
+  const noCo = await thandi.post("/api/requests", { item: "x", category: "IT Equipment", quantity: 1, estimatedCost: 100, department: "IT", reason: "x" });
+  check("a request without a company is refused (400)", noCo.status === 400 && /Small Civils or VZ Coatings/.test(noCo.data.error), noCo);
+  const badCo = await thandi.post("/api/requests", { item: "x", category: "IT Equipment", quantity: 1, estimatedCost: 100, department: "IT", reason: "x", company: "acme" });
+  check("an unknown company is refused (400)", badCo.status === 400, badCo);
+
+  // Default cascade: request -> order -> invoice keep the same company
+  const vzU = 7000 + cents;
+  const vz = await buildPo({ thandi, mpho, john, supplierId: xyz.id, category: "Furniture", item: `E2E VZ desk ${stamp}`, qty: 2, unitPrice: vzU, dept: "Operations", company: "vz_coatings" });
+  const poRow = await queryOne<any>("select company from purchase_orders where id = $1", [vz.poId]);
+  check("an order takes the company of its request by default", poRow.company === "vz_coatings", poRow);
+  const vzInv = await ayanda.post("/api/invoices", { poId: vz.poId, invoiceNumber: `INV-E2E-${stamp}-VZ`, invoiceDate: "2026-09-20", quantity: 2, unitPrice: vzU, ...sameBank(xyz) });
+  const vzInvRow = await queryOne<any>("select company from invoices where id = $1", [vzInv.data.invoiceId]);
+  check("an invoice takes the company of its order by default", vzInvRow.company === "vz_coatings", vzInvRow);
+
+  // Moving a project: started at Small Civils, continued at VZ Coatings
+  const mvU = 3000 + cents;
+  const mv = await buildPo({ thandi, mpho, john, supplierId: xyz.id, category: "Furniture", item: `E2E moved project ${stamp}`, qty: 2, unitPrice: mvU, dept: "Operations", company: "small_civils", orderCompany: "vz_coatings" });
+  const mvRow = await queryOne<any>("select po.company as po_co, r.company as req_co from purchase_orders po join purchase_requests r on r.id = po.request_id where po.id = $1", [mv.poId]);
+  check("Procurement can move an order to the other company", mvRow.req_co === "small_civils" && mvRow.po_co === "vz_coatings", mvRow);
+  const mvInv = await ayanda.post("/api/invoices", { poId: mv.poId, invoiceNumber: `INV-E2E-${stamp}-MV`, invoiceDate: "2026-09-20", quantity: 2, unitPrice: mvU, company: "small_civils", ...sameBank(xyz) });
+  const mvInvRow = await queryOne<any>("select company from invoices where id = $1", [mvInv.data.invoiceId]);
+  check("the Accountant can invoice under a different company", mvInvRow.company === "small_civils", mvInvRow);
+  const badOrderCo = await john.post("/api/orders", { requestId: 1, supplierId: xyz.id, unitPrice: 100, company: "acme" });
+  check("an unknown company on an order is refused (400)", badOrderCo.status === 400, badOrderCo);
+
+  const auditCo = await queryOne<any>("select count(*)::int n from audit_log where entity_ref = (select ref from purchase_orders where id = $1) and company = 'vz_coatings'", [vz.poId]);
+  check("the audit trail records the company of the action", auditCo.n >= 1, auditCo);
+
+  // Filters: each company only shows its own records
+  const iRef = (await queryOne<any>("select ref from invoices where id = $1", [vzInv.data.invoiceId]))!.ref as string;
+  const vzPage = await naledi.page("/invoices?company=vz_coatings");
+  const scPage = await naledi.page("/invoices?company=small_civils");
+  const allPage = await naledi.page("/invoices");
+  check("the VZ Coatings invoice filter shows a VZ invoice", vzPage.status === 200 && vzPage.text.includes(iRef));
+  check("the Small Civils invoice filter hides a VZ invoice", scPage.status === 200 && !scPage.text.includes(iRef));
+  check("the unfiltered list shows both", allPage.text.includes(iRef));
+  for (const p of ["/dashboard", "/alerts", "/alerts?show=all", "/journal", "/audit", "/requests?show=all"]) {
+    for (const co of ["small_civils", "vz_coatings"]) {
+      const r = await naledi.page(`${p}${p.includes("?") ? "&" : "?"}company=${co}`);
+      check(`Finance Manager: ${p} filtered to ${co}`, r.status === 200 && !r.text.includes("Application error"), r.status);
+    }
+  }
+  const ordVz = await john.page("/orders?company=vz_coatings");
+  check("Procurement: orders filtered to VZ Coatings", ordVz.status === 200 && ordVz.text.includes("VZ Coatings"));
+  const jrVz = await naledi.page("/journal?company=vz_coatings");
+  check("the journal filter shows only VZ Coatings entries", jrVz.status === 200 && !jrVz.text.includes("Small Civils</span></span>"));
+
+  // VAT shown on money
+  const vatPage = await naledi.page("/invoices");
+  check("invoice amounts show their VAT", /incl\. VAT (?:<!-- -->)?R[\d,]+\.\d\d/.test(vatPage.text));
+  const reqPage = await mpho.page("/requests?show=all");
+  check("request estimates show VAT added on top", /\+ VAT (?:<!-- -->)?R[\d,]+\.\d\d(?:<!-- -->)? = (?:<!-- -->)?R[\d,]+\.\d\d(?:<!-- -->)? incl\./.test(reqPage.text));
+
+  /* ------------------------------------------------------------ */
   section("Attention badges show up by themselves");
   const count = async (c: Client, key: string) => {
     const r = await c.json("/api/attention");
@@ -241,7 +297,7 @@ async function main() {
   const att = await thandi.json("/api/attention");
   check("the attention endpoint answers for a signed-in user", att.status === 200 && Array.isArray(att.data.tasks), att);
   const before = { mgr: await count(mpho, "req_from_employees"), order: await count(john, "to_order"), inv: await count(ayanda, "to_invoice"), pay: await count(ayanda, "to_pay") };
-  const nr = await thandi.post("/api/requests", { item: `E2E badge ${stamp}`, category: "IT Equipment", quantity: 2, estimatedCost: 2000, department: "IT", reason: "Badge test" });
+  const nr = await thandi.post("/api/requests", { item: `E2E badge ${stamp}`, category: "IT Equipment", quantity: 2, estimatedCost: 2000, department: "IT", reason: "Badge test", company: "small_civils" });
   check("Manager gets a badge when an employee makes a request", (await count(mpho, "req_from_employees")) === before.mgr + 1, before);
   await mpho.post(`/api/requests/${nr.data.id}/decision`, { decision: "approved", note: "ok" });
   check("Employee gets an update badge when the request is decided", (await count(thandi, "my_updates")) >= 1);
@@ -255,7 +311,7 @@ async function main() {
   const npo2 = await buildPo({ thandi, mpho, john, supplierId: abc.id, category: "IT Equipment", item: `E2E badge alert ${stamp}`, qty: 1, unitPrice: 500 + cents, dept: "IT" });
   await ayanda.post("/api/invoices", { poId: npo2.poId, invoiceNumber: `INV-E2E-${stamp}-G`, invoiceDate: "2026-09-20", quantity: 1, unitPrice: 900 + cents, bankName: "Standard Bank", accountHolder: "Other Co", accountNumber: "10184734491", branchCode: "051001" });
   check("Finance Manager gets an alert badge when an invoice is held", (await count(naledi, "alerts_active")) === fmBefore + 1);
-  const mreq = await mpho.post("/api/requests", { item: `E2E manager request ${stamp}`, category: "IT Equipment", quantity: 1, estimatedCost: 3000, department: "IT", reason: "Testing" });
+  const mreq = await mpho.post("/api/requests", { item: `E2E manager request ${stamp}`, category: "IT Equipment", quantity: 1, estimatedCost: 3000, department: "IT", reason: "Testing", company: "small_civils" });
   check("Finance Manager gets a badge for a manager's request", (await count(naledi, "req_from_managers")) >= 1, mreq);
   check("Manager's own request does not badge the manager", (await count(mpho, "req_from_employees")) === before.mgr);
   check("Auditor has no action badges apart from escalated alerts", ((await pieter.json("/api/attention")).data.tasks as any[]).every((t) => t.key === "alerts_escalated"));

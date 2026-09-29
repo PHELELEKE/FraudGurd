@@ -5,6 +5,8 @@ import { post, useAction, ErrorNote } from "./api";
 import { Field, Panel, RiskTag, Tag } from "./ui";
 import { matchInvoice, type Reason } from "@/lib/rules";
 import { rand } from "@/lib/format";
+import { round2 } from "@/lib/money";
+import { COMPANIES, COMPANY_LABEL, type Company } from "@/lib/companies";
 
 export interface CaptureOrder {
   id: number;
@@ -17,6 +19,7 @@ export interface CaptureOrder {
   total: number;
   received: number;
   status: string;
+  company: Company;
   bank: { bankName: string; accountHolder: string; accountNumber: string; branchCode: string };
 }
 
@@ -37,6 +40,7 @@ export function InvoiceCapture({ orders, today, defaultPoId }: { orders: Capture
   const [quantity, setQuantity] = useState(String(first ? first.received || first.quantity : ""));
   const [unitPrice, setUnitPrice] = useState(String(first?.unitPrice ?? ""));
   const [bank, setBank] = useState(first?.bank ?? { bankName: "", accountHolder: "", accountNumber: "", branchCode: "" });
+  const [company, setCompany] = useState<Company>(first?.company ?? "small_civils");
   const [result, setResult] = useState<Result | null>(null);
   const { run, busy, error } = useAction();
   const resultRef = useRef<HTMLDivElement>(null);
@@ -51,6 +55,7 @@ export function InvoiceCapture({ orders, today, defaultPoId }: { orders: Capture
       setQuantity(String(o.received || o.quantity));
       setUnitPrice(String(o.unitPrice));
       setBank(o.bank);
+      setCompany(o.company);
     }
   }
   const setB = (k: keyof typeof bank) => (e: React.ChangeEvent<HTMLInputElement>) => setBank((p) => ({ ...p, [k]: e.target.value }));
@@ -73,7 +78,7 @@ export function InvoiceCapture({ orders, today, defaultPoId }: { orders: Capture
     e.preventDefault();
     setResult(null);
     const out = await run(() =>
-      post<Result>("/api/invoices", { poId, invoiceNumber, invoiceDate, quantity: qty, unitPrice: price, ...bank })
+      post<Result>("/api/invoices", { poId, invoiceNumber, invoiceDate, quantity: qty, unitPrice: price, company, ...bank })
     );
     if (out) setResult(out);
   }
@@ -109,6 +114,22 @@ export function InvoiceCapture({ orders, today, defaultPoId }: { orders: Capture
               </div>
             </div>
 
+            <Field label="Company this invoice belongs to">
+              <select className="input" value={company} onChange={(e) => setCompany(e.target.value as Company)}>
+                {COMPANIES.map((c) => (
+                  <option key={c} value={c}>
+                    {COMPANY_LABEL[c]}
+                    {c === po.company ? " (as ordered)" : ""}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            {company !== po.company && (
+              <p className="text-[13px] text-mid">
+                This purchase order was raised under {COMPANY_LABEL[po.company]}. The invoice will be recorded under {COMPANY_LABEL[company]} instead.
+              </p>
+            )}
+
             <div className="grid grid-cols-2 gap-3">
               <Field label="Invoice number">
                 <input className="input num" required value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="For example: INV-90432" />
@@ -125,7 +146,10 @@ export function InvoiceCapture({ orders, today, defaultPoId }: { orders: Capture
             </div>
 
             <div className="flex items-baseline justify-between rounded-[10px] border border-line px-4 py-3">
-              <span className="text-mute">Invoice total (incl. VAT)</span>
+              <div>
+                <span className="text-mute">Invoice total (incl. VAT)</span>
+                <div className="num text-[13px] text-mute">of which VAT: {rand(round2(total - total / 1.15))}</div>
+              </div>
               <span className={`num text-xl font-semibold ${m.variance !== 0 ? "text-high" : ""}`}>{rand(total)}</span>
             </div>
 

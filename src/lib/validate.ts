@@ -1,4 +1,5 @@
 import { HttpError } from "./http";
+import { COMPANIES, type Company } from "./companies";
 import { round2 } from "./money";
 
 export function str(v: unknown, label: string, max = 200): string {
@@ -65,4 +66,11 @@ export function bank(body: Record<string, unknown>): BankDetails {
     accountNumber: accountNumber(body.accountNumber),
     branchCode: branchCode(body.branchCode),
   };
+}
+
+export function company(v: unknown, label = "Company"): Company {
+  if (typeof v !== "string" || !(COMPANIES as readonly string[]).includes(v)) {
+    throw new HttpError(400, `${label} must be Small Civils or VZ Coatings.`);
+  }
+  return v as Company;
 }

@@ -2,12 +2,16 @@ import Link from "next/link";
 import { requirePage } from "@/lib/auth";
 import { getDashboard, listInvoices } from "@/lib/queries";
 import { randCompact, fmtDate } from "@/lib/format";
-import { Amount, Empty, Panel, PageHeader, RiskTag, StatusTag } from "@/components/ui";
+import { AmountVat, CompanyTag, Empty, Panel, PageHeader, RiskTag, StatusTag } from "@/components/ui";
+import { CompanyFilterBar } from "@/components/CompanyFilter";
+import { parseCompanyFilter } from "@/lib/companies";
 import { RiskDonut, WeeklyBars } from "@/components/Charts";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ company?: string }> }) {
   const user = await requirePage("/dashboard");
-  const [d, recent] = await Promise.all([getDashboard(), listInvoices(8)]);
+  const { company } = await searchParams;
+  const companyFilter = parseCompanyFilter(company);
+  const [d, recent] = await Promise.all([getDashboard(companyFilter), listInvoices(8, companyFilter)]);
   const pct = (n: number) => (d.total ? Math.round((n / d.total) * 100) : 0);
   const canReview = user.role === "finance_manager" || user.role === "auditor";
 
@@ -24,6 +28,10 @@ export default async function DashboardPage() {
           ) : undefined
         }
       />
+
+      <div className="mb-4">
+        <CompanyFilterBar current={companyFilter} basePath="/dashboard" />
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Kpi label="Invoices checked" value={d.total} note={`${randCompact(d.paidValue)} paid so far`} color="accent" pct={100} />
@@ -74,6 +82,7 @@ export default async function DashboardPage() {
               <thead>
                 <tr>
                   <th>Captured</th>
+                  <th>Company</th>
                   <th>Invoice</th>
                   <th>Supplier</th>
                   <th className="r">Amount</th>
@@ -87,12 +96,15 @@ export default async function DashboardPage() {
                   <tr key={i.id}>
                     <td className="num text-mute">{fmtDate(i.captured_at)}</td>
                     <td>
+                      <CompanyTag company={i.company} />
+                    </td>
+                    <td>
                       <div className="num font-medium">{i.invoice_number}</div>
                       <div className="num text-[13px] text-mute">{i.ref}</div>
                     </td>
                     <td>{i.supplier}</td>
                     <td className="r">
-                      <Amount value={i.total} />
+                      <AmountVat value={i.total} />
                     </td>
                     <td>
                       <RiskTag score={i.risk_score} band={i.risk_band} />
