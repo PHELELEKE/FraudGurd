@@ -67,7 +67,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
         <CompanyFilterBar current={companyFilter} basePath="/requests" extraQuery={extraQuery} />
       </div>
 
-      <div className={`grid gap-4 ${user.role === "employee" ? "lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]" : ""}`}>
+      <div className={`grid grid-cols-1 gap-4 ${user.role === "employee" ? "lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]" : ""}`}>
         {user.role === "employee" && (
           <Panel title="New request" subtitle="Tell us what you need, why, and which company it is for.">
             {form}
@@ -77,14 +77,14 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
         <div className="space-y-4">
           {user.role === "manager" && (
             <details className="panel group">
-              <summary className="flex items-center justify-between px-6 py-4">
+              <summary className="flex items-center justify-between gap-3 px-4 py-4 sm:px-6">
                 <span>
                   <span className="text-lg font-semibold tracking-tight">Make a request of your own</span>
                   <span className="mt-0.5 block text-[14px] text-mute">Your own requests are approved by the Finance Manager.</span>
                 </span>
                 <span className="btn btn-sm">Open form</span>
               </summary>
-              <div className="border-t border-line px-6 py-5">{form}</div>
+              <div className="border-t border-line px-4 py-5 sm:px-6">{form}</div>
             </details>
           )}
 

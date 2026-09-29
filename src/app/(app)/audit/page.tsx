@@ -30,9 +30,9 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
         title="Audit trail"
         subtitle="Who did what, and when. Entries are only ever added, never changed or deleted."
         actions={
-          <form method="get" className="flex gap-2">
+          <form method="get" className="flex w-full gap-2 sm:w-auto">
             {companyFilter !== "all" && <input type="hidden" name="company" value={companyFilter} />}
-            <input className="input !w-[260px]" name="q" defaultValue={q} placeholder="Search person, action or reference" aria-label="Search the audit trail" />
+            <input className="input min-w-0 flex-1 sm:!w-[260px] sm:flex-none" name="q" defaultValue={q} placeholder="Search person, action or reference" aria-label="Search the audit trail" />
             <button className="btn">Search</button>
           </form>
         }

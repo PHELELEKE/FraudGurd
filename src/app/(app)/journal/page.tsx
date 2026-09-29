@@ -72,7 +72,7 @@ export default async function JournalPage({ searchParams }: { searchParams: Prom
           ) : (
             <ul className="divide-y divide-line">
               {entries.map((e) => (
-                <li key={e.id} className="px-6 py-4">
+                <li key={e.id} className="px-4 py-4 sm:px-6">
                   <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-3">
                       <span className="num font-medium">{e.ref}</span>
@@ -84,17 +84,19 @@ export default async function JournalPage({ searchParams }: { searchParams: Prom
                       {e.posted_by ? `, ${e.posted_by}` : ""}
                     </div>
                   </div>
+                  <div className="overflow-x-auto">
                   <table className="table">
                     <tbody>
                       {e.lines.map((l, i) => (
                         <tr key={i}>
-                          <td className={l.credit > 0 ? "pl-10 text-mute" : ""}>{l.account}</td>
-                          <td className="num r w-[160px]">{l.debit > 0 ? rand(l.debit) : ""}</td>
-                          <td className="num r w-[160px]">{l.credit > 0 ? rand(l.credit) : ""}</td>
+                          <td className={l.credit > 0 ? "pl-6 text-mute sm:pl-10" : ""}>{l.account}</td>
+                          <td className="num r w-[104px] sm:w-[160px]">{l.debit > 0 ? rand(l.debit) : ""}</td>
+                          <td className="num r w-[104px] sm:w-[160px]">{l.credit > 0 ? rand(l.credit) : ""}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 </li>
               ))}
             </ul>

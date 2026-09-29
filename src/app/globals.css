@@ -386,3 +386,34 @@ details > summary::-webkit-details-marker {
   color: var(--color-ink);
   font-weight: 500;
 }
+
+/* ---------- phones and tablets (desktop layout is not affected by anything below) ---------- */
+@media (max-width: 640px) {
+  /* 16px stops iPhones zooming the page when a field is tapped */
+  .input {
+    font-size: 16px;
+  }
+  .table th,
+  .table td {
+    padding: 10px 12px;
+  }
+  .company-filter {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+}
+
+/* finger-sized targets on touch screens only */
+@media (pointer: coarse) {
+  .btn-sm {
+    height: 40px;
+  }
+  .nav-link {
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+  .company-filter a {
+    padding-top: 9px;
+    padding-bottom: 9px;
+  }
+}

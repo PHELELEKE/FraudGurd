@@ -22,7 +22,7 @@ export function Panel({
   return (
     <section className={`panel ${className}`}>
       {(title || action) && (
-        <header className="flex items-start justify-between gap-4 px-6 pt-5 pb-4">
+        <header className="flex items-start justify-between gap-3 px-4 pt-4 pb-3 sm:gap-4 sm:px-6 sm:pt-5 sm:pb-4">
           <div>
             {title && <h2 className="text-lg font-semibold tracking-tight">{title}</h2>}
             {subtitle && <p className="mt-0.5 text-[14px] text-mute">{subtitle}</p>}
@@ -30,18 +30,18 @@ export function Panel({
           {action}
         </header>
       )}
-      <div className={flush ? "" : `px-6 pb-6 ${title || action ? "" : "pt-6"}`}>{children}</div>
+      <div className={flush ? "" : `px-4 pb-4 sm:px-6 sm:pb-6 ${title || action ? "" : "pt-4 sm:pt-6"}`}>{children}</div>
     </section>
   );
 }
 
 export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: string; actions?: ReactNode }) {
   return (
-    <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-      <div className="flex gap-4">
+    <div className="mb-5 flex flex-wrap items-end justify-between gap-3 sm:mb-6 sm:gap-4">
+      <div className="flex min-w-0 gap-3 sm:gap-4">
         <span className="mt-1 w-1 shrink-0 self-stretch rounded-full" style={{ background: "var(--role, var(--color-accent))" }} />
-        <div>
-          <h1 className="text-[28px] leading-9 font-semibold tracking-tight">{title}</h1>
+        <div className="min-w-0">
+          <h1 className="text-[24px] leading-8 font-semibold tracking-tight sm:text-[28px] sm:leading-9">{title}</h1>
           {subtitle && <p className="mt-1 max-w-3xl text-mute">{subtitle}</p>}
         </div>
       </div>
@@ -93,7 +93,7 @@ export function Amount({ value, className = "" }: { value: number; className?: s
 
 export function Empty({ title, children }: { title: string; children?: ReactNode }) {
   return (
-    <div className="px-6 py-12 text-center">
+    <div className="px-4 py-10 text-center sm:px-6 sm:py-12">
       <p className="font-medium">{title}</p>
       {children && <p className="mx-auto mt-1 max-w-md text-mute">{children}</p>}
     </div>

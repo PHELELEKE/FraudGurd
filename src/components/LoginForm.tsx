@@ -53,22 +53,22 @@ export function LoginForm({ demo, accounts }: { demo: boolean; accounts: Account
       <ErrorNote message={error} />
 
       {demo && (
-        <div className="mt-8 border-t border-line pt-6">
-          <p className="mb-3 text-[14px] text-mute">Demo accounts. Pick a role to sign in as that person.</p>
-          <div className="grid gap-2">
+        <div className="login-demo mt-7 border-t pt-5">
+          <p className="mb-3 text-[14px] text-[#aab5cc]">Demo accounts. Pick a role to sign in as that person.</p>
+          <div className="grid gap-2 sm:grid-cols-2">
             {accounts.map((a) => (
               <button
                 key={a.email}
                 type="button"
                 disabled={busy}
                 onClick={() => signIn(a.email, "Password123!")}
-                className="panel-raised flex items-center justify-between px-4 py-2.5 text-left hover:border-[#3b414a] disabled:opacity-50"
+                className="login-account flex items-center gap-3 px-3.5 py-2.5 text-left"
               >
-                <span className="flex items-center gap-3 font-medium">
-                  <span className="h-3 w-3 rounded-full" style={{ background: a.color }} />
-                  {a.role}
+                <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: a.color }} />
+                <span className="min-w-0">
+                  <span className="block truncate font-medium">{a.role}</span>
+                  <span className="block truncate text-[13px] text-[#8f9bb5]">{a.name}</span>
                 </span>
-                <span className="text-[14px] text-mute">{a.name}</span>
               </button>
             ))}
           </div>

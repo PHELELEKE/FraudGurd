@@ -4,6 +4,7 @@ import { homeFor } from "@/lib/roles";
 import { DEMO_ACCOUNTS } from "@/lib/demo";
 import { Logo } from "@/components/ui";
 import { LoginForm } from "@/components/LoginForm";
+import "./login.css";
 
 export const dynamic = "force-dynamic";
 
@@ -13,19 +14,22 @@ export default async function LoginPage() {
   const demo = process.env.DEMO_MODE !== "false";
 
   return (
-    <main className="grid min-h-screen place-items-center px-4 py-10">
-      <div className="w-full max-w-[440px]">
-        <div className="mb-8 flex items-center gap-3">
+    <main className="login-shell">
+      <div className="login-inner">
+        <header className="login-brand">
           <Logo size={36} />
-          <span className="text-2xl font-semibold tracking-tight">FraudGuard</span>
-        </div>
-        <div className="panel p-8">
-          <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
-          <p className="mt-1 mb-6 text-mute">
+          <span>FraudGuard</span>
+        </header>
+
+        <section className="login-main">
+          <h1 className="login-title">Sign in</h1>
+          <p className="login-lead">
             FraudGuard flags unusual purchases for a person to review. It never accuses anyone.
           </p>
           <LoginForm demo={demo} accounts={[...DEMO_ACCOUNTS]} />
-        </div>
+        </section>
+
+        <footer className="login-foot">Fraud monitoring for Small Civils and VZ Coatings</footer>
       </div>
     </main>
   );

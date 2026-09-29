@@ -232,7 +232,7 @@ function MatchCard({ title, ref_, rows, note }: { title: string; ref_: string; r
 function ResultPanel({ r, onAgain }: { r: Result; onAgain: () => void }) {
   const ok = r.outcome === "approved";
   return (
-    <section className={`panel border-2 p-6 ${ok ? "border-low/60" : r.result.band === "high" ? "border-high/60" : "border-mid/60"}`}>
+    <section className={`panel border-2 p-4 sm:p-6 ${ok ? "border-low/60" : r.result.band === "high" ? "border-high/60" : "border-mid/60"}`}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-xl font-semibold tracking-tight">
