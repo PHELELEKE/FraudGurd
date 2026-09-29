@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { post, useAction, ErrorNote } from "./api";
 import { Field } from "./ui";
+import { addVat, splitVat } from "@/lib/money";
 import { rand } from "@/lib/format";
 import { COMPANIES, COMPANY_LABEL, type Company } from "@/lib/companies";
 
@@ -21,11 +22,11 @@ export function CreateOrderRow({
   requestCompany: Company;
 }) {
   const [supplierId, setSupplierId] = useState(String(suppliers[0]?.id ?? ""));
-  const [unitPrice, setUnitPrice] = useState(String(estimatedUnit));
+  const [unitPrice, setUnitPrice] = useState(String(addVat(estimatedUnit).total));
   const [company, setCompany] = useState<Company>(requestCompany);
   const { run, busy, error } = useAction();
   const total = Math.round(quantity * Number(unitPrice || 0) * 100) / 100;
-  const vat = Math.round(total * 0.15 * 100) / 100;
+  const { vat } = splitVat(total);
 
   return (
     <div>
