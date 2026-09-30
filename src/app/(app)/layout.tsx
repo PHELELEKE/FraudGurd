@@ -8,6 +8,8 @@ import { initials } from "@/lib/format";
 import { Logo } from "@/components/ui";
 import { NavLinks, SignOutButton } from "@/components/Nav";
 import { AttentionProvider, TaskStrip } from "@/components/Attention";
+import { ChangePasswordForm } from "@/components/ChangePasswordForm";
+import { Panel } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -36,20 +38,32 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </Link>
             <NavLinks items={NAV_BY_ROLE[user.role]} />
             <div className="ml-auto flex items-center gap-3">
-              <div className="hidden text-right sm:block">
-                <div className="text-[14px] leading-tight font-medium">{user.name}</div>
-                <div className="text-[13px] leading-tight font-medium" style={{ color }}>
-                  {ROLE_LABEL[user.role]}
+              <Link href="/account" className="flex items-center gap-3" title="My account">
+                <div className="hidden text-right sm:block">
+                  <div className="text-[14px] leading-tight font-medium">{user.name}</div>
+                  <div className="text-[13px] leading-tight font-medium" style={{ color }}>
+                    {ROLE_LABEL[user.role]}
+                  </div>
                 </div>
-              </div>
-              <div className="avatar grid h-9 w-9 place-items-center rounded-full text-[13px] font-bold">{initials(user.name)}</div>
+                <div className="avatar grid h-9 w-9 place-items-center rounded-full text-[13px] font-bold">{initials(user.name)}</div>
+              </Link>
               <SignOutButton />
             </div>
           </div>
         </header>
         <main className="mx-auto max-w-[1280px] px-4 py-6 md:px-6 md:py-8">
-          <TaskStrip greeting={greetingFor(user.name)} home={homeFor(user.role)} />
-          {children}
+          {user.must_change_password ? (
+            <div className="mx-auto max-w-lg pt-4">
+              <Panel title="Choose a new password" subtitle="Your password was set for you. Pick your own before you carry on.">
+                <ChangePasswordForm currentLabel="Password you were given" />
+              </Panel>
+            </div>
+          ) : (
+            <>
+              <TaskStrip greeting={greetingFor(user.name)} home={homeFor(user.role)} />
+              {children}
+            </>
+          )}
         </main>
       </AttentionProvider>
     </div>

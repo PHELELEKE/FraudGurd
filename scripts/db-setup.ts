@@ -7,7 +7,7 @@ import { pool, query, queryOne } from "../src/lib/db";
 import { seedAll } from "./seed";
 
 const TABLES = [
-  "audit_log", "journal_lines", "journal_entries", "alerts", "invoices", "goods_received",
+  "password_resets", "audit_log", "journal_lines", "journal_entries", "alerts", "invoices", "goods_received",
   "purchase_orders", "purchase_requests", "category_norms", "supplier_bank_history", "suppliers", "users",
 ];
 

@@ -106,7 +106,7 @@
       url("/login-bg.jpg") right center / cover no-repeat;
   }
   .login-inner {
-    width: min(50vw, 640px);
+    width: min(54vw, 720px);
     max-width: none;
     margin: 0;
     padding: 40px 32px 28px clamp(32px, 7vw, 112px);
@@ -116,10 +116,106 @@
     flex-direction: column;
     justify-content: center;
     width: 100%;
-    max-width: 440px;
+    max-width: 500px;
     padding-top: 24px;
   }
   .login-title {
     font-size: 36px;
   }
+}
+
+/* ---------- the card, and the flip between Sign in / Register / Forgot password ---------- */
+.auth-card {
+  background: rgba(6, 12, 28, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 16px;
+  padding: 22px 20px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+}
+@media (min-width: 640px) {
+  .auth-card {
+    padding: 28px;
+  }
+}
+.auth-flip {
+  perspective: 1400px;
+}
+.auth-flip-inner {
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1), height 0.4s ease;
+}
+.auth-flip-inner.is-flipped {
+  transform: rotateY(180deg);
+}
+.auth-face {
+  width: 100%;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.auth-face-back {
+  transform: rotateY(180deg);
+}
+/* Before the card has measured itself, only the front is in the page flow. */
+.auth-flip-inner:not(.is-ready) .auth-face-back {
+  display: none;
+}
+.auth-flip-inner.is-ready .auth-face {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  /* No spinning: fade between the two faces instead. */
+  .auth-flip-inner,
+  .auth-flip-inner.is-flipped {
+    transform: none;
+    transition: height 0.2s ease;
+  }
+  .auth-face,
+  .auth-face-back {
+    transform: none;
+    transition: opacity 0.2s ease;
+  }
+  .auth-face-back,
+  .auth-flip-inner.is-flipped .auth-face-front {
+    opacity: 0;
+  }
+  .auth-flip-inner.is-flipped .auth-face-back {
+    opacity: 1;
+  }
+}
+
+.auth-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-top: 16px;
+  font-size: 14px;
+  color: #aab5cc;
+}
+.auth-link {
+  background: none;
+  border: 0;
+  padding: 2px 0;
+  font: inherit;
+  color: #82b1ff;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.auth-link:hover {
+  color: #b5d0ff;
+}
+.login-shell .login-title,
+.login-shell .login-lead {
+  /* the title and lead now sit inside the card */
+  margin-top: 0;
+}
+.login-shell .auth-card .login-lead {
+  margin-bottom: 20px;
+}
+.login-shell .auth-card .login-demo {
+  margin-top: 24px;
 }

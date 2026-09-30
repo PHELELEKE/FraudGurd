@@ -168,3 +168,20 @@ create index if not exists purchase_requests_company_idx on purchase_requests (c
 create index if not exists purchase_orders_company_idx on purchase_orders (company);
 create index if not exists invoices_company_idx on invoices (company);
 create index if not exists audit_log_company_idx on audit_log (company);
+
+-- Accounts: phone number, "choose a new password at next sign-in", and one-time reset links.
+-- Safe to run again.
+alter table users add column if not exists phone text;
+alter table users add column if not exists must_change_password boolean not null default false;
+alter table users add column if not exists password_changed_at timestamptz;
+
+-- Only a hash of each reset token is stored, so a copy of the database cannot be used to reset anyone's password.
+create table if not exists password_resets (
+  id         serial primary key,
+  user_id    int not null references users(id) on delete cascade,
+  token_hash text not null unique,
+  expires_at timestamptz not null,
+  used_at    timestamptz,
+  created_at timestamptz not null default now()
+);
+create index if not exists password_resets_user_idx on password_resets (user_id);

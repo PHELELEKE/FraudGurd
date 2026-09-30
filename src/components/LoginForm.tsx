@@ -4,7 +4,13 @@ import { useRouter } from "next/navigation";
 import { post, ErrorNote } from "./api";
 import { Field } from "./ui";
 
-export function LoginForm() {
+export function LoginForm({
+  onForgot,
+  onRegister,
+}: {
+  onForgot: () => void;
+  onRegister: () => void;
+}) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -44,6 +50,14 @@ export function LoginForm() {
         </button>
       </form>
       <ErrorNote message={error} />
+      <p className="auth-row">
+        <button type="button" className="auth-link" onClick={onForgot}>
+          Forgot password?
+        </button>
+        <button type="button" className="auth-link" onClick={onRegister}>
+          Register as an employee
+        </button>
+      </p>
     </>
   );
 }

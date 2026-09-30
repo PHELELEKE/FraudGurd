@@ -21,7 +21,9 @@ export type Perm =
   | "supplier.verify"
   | "invoice.capture"
   | "invoice.pay"
-  | "alert.decide";
+  | "alert.decide"
+  | "user.create"
+  | "user.reset";
 
 const PERMS: Record<Perm, readonly Role[]> = {
   "request.create": ["employee", "manager"],
@@ -34,6 +36,8 @@ const PERMS: Record<Perm, readonly Role[]> = {
   "invoice.capture": ["accountant"],
   "invoice.pay": ["accountant"],
   "alert.decide": ["finance_manager"],
+  "user.create": ["manager"],
+  "user.reset": ["manager", "finance_manager"],
 };
 
 export function can(role: Role, perm: Perm): boolean {
@@ -58,7 +62,10 @@ export const ROLE_COLOR: Record<Role, string> = {
 /** The navigation bar only shows what that role actually works with. */
 export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   employee: [{ href: "/requests", label: "My requests" }],
-  manager: [{ href: "/requests", label: "Requests to approve" }],
+  manager: [
+    { href: "/requests", label: "Requests to approve" },
+    { href: "/users", label: "Users" },
+  ],
   procurement: [
     { href: "/orders", label: "Orders" },
     { href: "/suppliers", label: "Suppliers" },
@@ -73,6 +80,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { href: "/requests", label: "Requests" },
     { href: "/suppliers", label: "Suppliers" },
     { href: "/audit", label: "Audit trail" },
+    { href: "/users", label: "Users" },
   ],
   auditor: [
     { href: "/dashboard", label: "Dashboard" },
@@ -93,7 +101,15 @@ const ACCESS: [string, readonly Role[]][] = [
   ["/invoices", ["accountant", "finance_manager", "auditor"]],
   ["/journal", ["accountant", "finance_manager", "auditor"]],
   ["/audit", ["finance_manager", "auditor"]],
+  ["/users", ["manager", "finance_manager"]],
 ];
+
+/** Only these roles can change their own password. Everyone else asks the Manager to reset it. */
+export const SELF_SERVICE_ROLES: readonly Role[] = ["employee", "manager"];
+
+export function canChangeOwnPassword(role: Role): boolean {
+  return SELF_SERVICE_ROLES.includes(role);
+}
 
 export function homeFor(role: Role): string {
   return NAV_BY_ROLE[role][0]!.href;

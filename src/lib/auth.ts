@@ -14,6 +14,8 @@ export interface SessionUser {
   email: string;
   role: Role;
   department: string;
+  phone: string | null;
+  must_change_password: boolean;
 }
 
 function secret(): Uint8Array {
@@ -54,7 +56,16 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     const { payload } = await jwtVerify(token, secret());
     const uid = Number(payload.uid);
     if (!Number.isInteger(uid)) return null;
-    return await queryOne<SessionUser>("select id, name, email, role, department from users where id = $1", [uid]);
+    const row = await queryOne<SessionUser & { password_changed_at: Date | null }>(
+      "select id, name, email, role, department, phone, must_change_password, password_changed_at from users where id = $1",
+      [uid]
+    );
+    if (!row) return null;
+    // A session created before the password was last changed or reset is no longer valid.
+    const issued = typeof payload.iat === "number" ? payload.iat : 0;
+    if (row.password_changed_at && issued < Math.floor(row.password_changed_at.getTime() / 1000)) return null;
+    const { password_changed_at: _ignored, ...user } = row;
+    return user;
   } catch {
     return null;
   }
