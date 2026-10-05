@@ -51,6 +51,11 @@ class Client {
     const data: any = await res.json().catch(() => ({}));
     return { status: res.status, data };
   }
+  async get(path: string) {
+    const res = await fetch(`${BASE}${path}`, { headers: { ...(this.cookie ? { Cookie: this.cookie } : {}) } });
+    const bytes = Buffer.from(await res.arrayBuffer());
+    return { status: res.status, headers: res.headers, bytes };
+  }
   async json(path: string) {
     const res = await fetch(`${BASE}${path}`, { headers: { Cookie: this.cookie } });
     return { status: res.status, data: (await res.json().catch(() => ({}))) as any };
@@ -89,6 +94,7 @@ async function main() {
   }
 
   const thandi = await who("thandi");
+  const sindi = await who("sindi");
   const mpho = await who("mpho");
   const john = await who("john");
   const ayanda = await who("ayanda");
@@ -262,6 +268,42 @@ async function main() {
 
   const auditCo = await queryOne<any>("select count(*)::int n from audit_log where entity_ref = (select ref from purchase_orders where id = $1) and company = 'vz_coatings'", [vz.poId]);
   check("the audit trail records the company of the action", auditCo.n >= 1, auditCo);
+
+  /* ------------------------------------------------------------ */
+  section("PDF export and duplicate request checks");
+  const pdfAcc = await ayanda.get(`/api/invoices/${inv1.data.invoiceId}/pdf`);
+  const pdfFm = await naledi.get(`/api/invoices/${inv1.data.invoiceId}/pdf`);
+  const pdfAud = await pieter.get(`/api/invoices/${inv1.data.invoiceId}/pdf`);
+  const pdfEmp = await thandi.get(`/api/invoices/${inv1.data.invoiceId}/pdf`);
+  const pdfMgr = await mpho.get(`/api/invoices/${inv1.data.invoiceId}/pdf`);
+  const pdfType = (h: Headers) => h.get("content-type") ?? "";
+  check("accountant can download a PDF case file", pdfAcc.status === 200 && pdfType(pdfAcc.headers).includes("application/pdf") && pdfAcc.bytes.length > 500, { status: pdfAcc.status, type: pdfType(pdfAcc.headers), bytes: pdfAcc.bytes.length });
+  check("finance manager can download a PDF case file", pdfFm.status === 200 && pdfType(pdfFm.headers).includes("application/pdf"), pdfFm.status);
+  check("auditor can download a PDF case file", pdfAud.status === 200 && pdfType(pdfAud.headers).includes("application/pdf"), pdfAud.status);
+  check("employee cannot download a PDF case file (403)", pdfEmp.status === 403, pdfEmp.status);
+  check("manager cannot download a PDF case file (403)", pdfMgr.status === 403, pdfMgr.status);
+
+  const dupItem = `Duplicate request ${stamp}`;
+  const dup1 = await thandi.post("/api/requests", { item: dupItem, category: "IT Equipment", quantity: 2, estimatedCost: 5000, department: "IT", reason: "Need the same item in both companies", company: "small_civils" });
+  const dup2 = await sindi.post("/api/requests", { item: `  ${dupItem.toUpperCase()}  `, category: "IT Equipment", quantity: 2, estimatedCost: 5000, department: "Sales", reason: "Same item needed for a different location", company: "vz_coatings" });
+  check("duplicate requests are identified across companies", dup1.status === 200 && dup2.status === 200, { dup1, dup2 });
+  const reqDupPage = await naledi.page("/requests?show=all");
+  check("the duplicate flag is visible to a manager or finance manager", reqDupPage.status === 200 && reqDupPage.text.includes("Duplicate of") && reqDupPage.text.includes("VZ Coatings") && reqDupPage.text.includes("Small Civils"), reqDupPage.status);
+  const dupWithoutReason = await naledi.post(`/api/requests/${dup1.data.id}/decision`, { decision: "approved" });
+  check("approving a duplicate without a written reason is rejected (400)", dupWithoutReason.status === 400, dupWithoutReason);
+  const dupApproved = await naledi.post(`/api/requests/${dup1.data.id}/decision`, { decision: "approved", note: "We only need one of these requests to proceed." });
+  check("approving a duplicate with a reason succeeds", dupApproved.status === 200 && dupApproved.data.status === "approved", dupApproved);
+  const dupCancelled = await queryOne<any>("select status, decision_note from purchase_requests where id = $1", [dup2.data.id]);
+  check("the other pending duplicate is auto-cancelled", dupCancelled.status === "cancelled" && dupCancelled.decision_note.includes(dup1.data.ref) && dupCancelled.decision_note.includes("one of these requests"), dupCancelled);
+  const dupAudit = await queryOne<any>("select * from audit_log where action = 'request.cancelled_duplicate' and entity_ref = $1 order by at desc", [dup2.data.ref]);
+  check("the audit trail records the duplicate cancellation", !!dupAudit && dupAudit.details?.keptRequest === dup1.data.ref, dupAudit);
+
+  const sameCompanyDuplicate = `Same company duplicate ${stamp}`;
+  const sameBody1 = await thandi.post("/api/requests", { item: sameCompanyDuplicate, category: "Office Supplies", quantity: 1, estimatedCost: 1200, department: "Sales", reason: "Two teams want the same item", company: "small_civils" });
+  const sameBody2 = await sindi.post("/api/requests", { item: `  ${sameCompanyDuplicate}  `, category: "Office Supplies", quantity: 1, estimatedCost: 1200, department: "Sales", reason: "Same item in the same company", company: "small_civils" });
+  check("same-company duplicates are flagged too", sameBody1.status === 200 && sameBody2.status === 200, { sameBody1, sameBody2 });
+  const sameCoPage = await naledi.page("/requests?show=all");
+  check("same-company duplicate warnings are visible on the view page", sameCoPage.status === 200 && sameCoPage.text.includes(sameCompanyDuplicate), sameCoPage.status);
 
   // Filters: each company only shows its own records
   const iRef = (await queryOne<any>("select ref from invoices where id = $1", [vzInv.data.invoiceId]))!.ref as string;

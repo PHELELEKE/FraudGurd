@@ -48,6 +48,13 @@ export default async function AlertPage({ params }: { params: Promise<{ id: stri
           <div className="mt-1">
             <StatusTag status={a.status} label={active ? "Payment held" : undefined} />
           </div>
+          {(["accountant", "finance_manager", "auditor"] as string[]).includes(user.role) && (
+            <div className="mt-2">
+              <Link href={`/api/invoices/${a.invoice.id}/pdf`} target="_blank" rel="noreferrer" className="btn btn-sm">
+                Download PDF
+              </Link>
+            </div>
+          )}
         </div>
       </div>
 

@@ -197,8 +197,10 @@ export async function seedAll(log: (m: string) => void = console.log) {
   const r1 = await createRequest(sindi, { item: "Ergonomic desk chairs", category: "Furniture", quantity: 6, estimatedCost: 11400, department: "Sales", reason: "Replacing broken chairs in the sales office", company: "small_civils" });
   const r2 = await createRequest(mpho, { item: "Conference room display screen", category: "IT Equipment", quantity: 1, estimatedCost: 18500, department: "IT", reason: "Client presentations", company: "vz_coatings" });
   const r3 = await createRequest(kagiso, { item: "Network switches", category: "IT Equipment", quantity: 4, estimatedCost: 14000, department: "Operations", reason: "Warehouse network upgrade", company: "small_civils" });
+  const dupA = await createRequest(thandi, { item: "Wireless presentation remote", category: "IT Equipment", quantity: 2, estimatedCost: 4200, department: "IT", reason: "Boardroom setup needs a spare remote", company: "small_civils" });
+  const dupB = await createRequest(sindi, { item: " wireless presentation remote ", category: "IT Equipment", quantity: 2, estimatedCost: 4200, department: "Sales", reason: "Sales team needs the same replacement remote", company: "vz_coatings" });
   await decideRequest(mpho, r3.id, { decision: "approved", note: "Approved" });
-  void r1; void r2;
+  void r1; void r2; void dupA; void dupB;
 
   // Three purchase orders that are delivered and ready to be invoiced.
   async function readyPo(requester: Actor, dept: string, category: string, item: string, qty: number, unitPrice: number, supplier: string, company: Company) {

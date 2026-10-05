@@ -14,6 +14,7 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
   const companyFilter = parseCompanyFilter(company);
   const canCapture = can(user.role, "invoice.capture");
   const canPay = can(user.role, "invoice.pay");
+  const canDownloadPdf = ["accountant", "finance_manager", "auditor"].includes(user.role);
   const invoices = await listInvoices(100, companyFilter);
 
   if (!canCapture) {
@@ -25,7 +26,7 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
           <CompanyFilterBar current={companyFilter} basePath="/invoices" />
         </div>
         <Panel flush>
-          <InvoiceTable rows={invoices} />
+          <InvoiceTable rows={invoices} canDownload={canDownloadPdf} />
         </Panel>
       </>
     );
@@ -94,7 +95,16 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
                       <td>
                         <RiskTag score={i.risk_score} band={i.risk_band} />
                       </td>
-                      <td className="r">{canPay && <div className="flex justify-end"><PayButton id={i.id} /></div>}</td>
+                      <td className="r">
+                        <div className="flex justify-end gap-2">
+                          {canDownloadPdf && (
+                            <Link href={`/api/invoices/${i.id}/pdf`} target="_blank" rel="noreferrer" className="btn btn-sm">
+                              Download PDF
+                            </Link>
+                          )}
+                          {canPay && <PayButton id={i.id} />}
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -163,7 +173,7 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
   );
 }
 
-function InvoiceTable({ rows }: { rows: InvoiceRow[] }) {
+function InvoiceTable({ rows, canDownload = false }: { rows: InvoiceRow[]; canDownload?: boolean }) {
   if (rows.length === 0) return <Empty title="No invoices yet" />;
   return (
     <div className="overflow-x-auto">
@@ -209,11 +219,18 @@ function InvoiceTable({ rows }: { rows: InvoiceRow[] }) {
                 <div className="text-[13px] text-mute">{i.captured_by_name}</div>
               </td>
               <td className="r">
-                {i.alert_id && (
-                  <Link href={`/alerts/${i.alert_id}`} className="btn btn-sm">
-                    {i.status === "held" ? "Review" : "Alert"}
-                  </Link>
-                )}
+                <div className="flex justify-end gap-2">
+                  {canDownload && (
+                    <Link href={`/api/invoices/${i.id}/pdf`} target="_blank" rel="noreferrer" className="btn btn-sm">
+                      Download PDF
+                    </Link>
+                  )}
+                  {i.alert_id && (
+                    <Link href={`/alerts/${i.alert_id}`} className="btn btn-sm">
+                      {i.status === "held" ? "Review" : "Alert"}
+                    </Link>
+                  )}
+                </div>
               </td>
             </tr>
           ))}

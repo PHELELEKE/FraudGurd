@@ -3,7 +3,7 @@ import { requirePage } from "@/lib/auth";
 import { DEPARTMENTS, listCategories, listRequests } from "@/lib/queries";
 import { can } from "@/lib/roles";
 import { fmtDate } from "@/lib/format";
-import { parseCompanyFilter } from "@/lib/companies";
+import { COMPANY_LABEL, parseCompanyFilter } from "@/lib/companies";
 import { AmountExclVat, CompanyTag, Empty, PageHeader, Panel, StatusTag } from "@/components/ui";
 import { CompanyFilterBar } from "@/components/CompanyFilter";
 import { RequestForm } from "@/components/RequestForm";
@@ -120,6 +120,17 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
                             {r.ref}, {r.category}, {r.department}, {fmtDate(r.created_at)}
                           </div>
                           {r.status === "pending" && <div className="mt-1 text-[13px] text-mute">Reason: {r.reason}</div>}
+                          {r.duplicates.length > 0 && (
+                            <div className="mt-2 rounded border border-line bg-panel px-2 py-1 text-[12px] text-ink">
+                              <span className="mr-1">⚠</span>
+                              Duplicate of {r.duplicates.map((d) => `${COMPANY_LABEL[d.company]}: ${d.requester} (${d.ref})`).join("; ")}
+                            </div>
+                          )}
+                          {user.role !== "employee" && r.possible_duplicates.length > 0 && (
+                            <div className="mt-2 rounded border border-mid/40 bg-mid/10 px-2 py-1 text-[12px] text-ink">
+                              Possible match suggested by AI; review manually: {r.possible_duplicates.map((d) => `${d.quantity} x ${d.item} (${d.category}, ${COMPANY_LABEL[d.company]}, ${d.ref})`).join("; ")}
+                            </div>
+                          )}
                           {r.decision_note && <div className="mt-1 text-[13px] text-mute">Note: {r.decision_note}</div>}
                         </td>
                         <td>
@@ -141,7 +152,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
                             ) : user.role === "manager" && r.requester_role !== "employee" ? (
                               <span className="text-[13px] text-mute">Goes to the Finance Manager.</span>
                             ) : (
-                              <RequestActions id={r.id} />
+                              <RequestActions id={r.id} duplicates={r.duplicates} possibleDuplicates={r.possible_duplicates} />
                             )}
                           </td>
                         )}

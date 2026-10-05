@@ -69,6 +69,14 @@ You need Node.js 20 or newer.
 
 Roles are enforced on the server for every action (`src/lib/p2p.ts`), not just by hiding buttons.
 
+## New case-file and duplicate-request features
+
+- Accountants, Finance Managers and Auditors can open a downloadable PDF case file for any invoice from the Invoices list or an Alert detail page. The PDF captures the request, approvals, purchase order, goods received, supplier invoice, fraud alert outcome, payment details, and journal entries in one file.
+- If two pending purchase requests share the same item text after trimming and lowercasing, the approving manager sees a duplicate warning, must add a written reason before approving or rejecting, and approving one auto-cancels the other pending duplicate(s) with an audit trail entry explaining why.
+- When `GROQ_DUPLICATE_CHECK=true` and `GROQ_API_KEY` is configured, Groq can suggest semantically similar pending requests using only item text, category and quantity. Suggestions are advisory, shown to approvers, require a written decision reason, and never auto-cancel another request. If Groq is unavailable, request submission continues with exact matching only.
+- On Netlify, add `GROQ_API_KEY`, `GROQ_DUPLICATE_CHECK=true`, and optionally `GROQ_MODEL` (defaults to `openai/gpt-oss-20b`) under the site's environment variables. Keep the API key out of source control.
+- Before deploying this schema change, run `npm run db:setup` with `DATABASE_URL` pointing at the app's database. This applies the additive migration without resetting existing data; do not use `npm run db:reset` for deployment.
+
 ## Small Civils and VZ Coatings
 
 The business behind this prototype is run as two companies sharing one set of staff, suppliers and system: **Small Civils** and **VZ Coatings**. Every purchase request, order, invoice, alert and journal entry belongs to one of the two, shown everywhere as a small coloured chip (a gold dot for Small Civils, a blue dot for VZ Coatings, with the name always spelled out next to it).
@@ -133,6 +141,7 @@ A rejected invoice posts nothing. The journal page shows every entry and checks 
    - `DATABASE_URL`: your Neon connection string
    - `AUTH_SECRET`: a long random string. Generate one with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
    - `DEMO_MODE`: `true` to keep the one-click demo accounts on the login page, `false` to hide them
+   - Optional Groq matching: set `GROQ_API_KEY` and `GROQ_DUPLICATE_CHECK=true`; `GROQ_MODEL` defaults to `openai/gpt-oss-20b`
 4. Deploy. The database is the same Neon database you set up locally, so it already has the tables and demo data.
 
 Neon's free plan pauses the database when it is idle, so the first request after a quiet spell is slow. Open the app and sign in a few minutes before you present. Vercel's free plan is for personal, non-commercial use (as far as I know), which suits the assessment.

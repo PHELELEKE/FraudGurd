@@ -7,7 +7,7 @@
  *   3. writes an audit log entry (who, what, when).
  */
 import type { PoolClient } from "pg";
-import { withTx } from "./db";
+import { query, queryOne, withTx } from "./db";
 import { HttpError } from "./http";
 import { ACCOUNTS } from "./accounts";
 import { splitVat } from "./money";
@@ -15,6 +15,8 @@ import type { Company } from "./companies";
 import { rand } from "./format";
 import { can, ROLE_LABEL, type Perm, type Role } from "./roles";
 import { scoreInvoice, DUPLICATE_AMOUNT_WINDOW_DAYS, FREQUENT_WINDOW_DAYS, type RuleResult } from "./rules";
+import { normalizeDuplicateItem } from "./duplicates";
+import { suggestSemanticDuplicateIds, type SimilarityCandidate } from "./groq";
 import * as v from "./validate";
 
 export interface Actor {
@@ -60,17 +62,33 @@ export async function createRequest(a: Actor, body: Body) {
   const department = v.str(body.department, "Department", 60);
   const reason = v.str(body.reason, "Reason", 300);
   const co = v.company(body.company);
+  const cat = await queryOne("select 1 from category_norms where category = $1", [category]);
+  if (!cat) throw new HttpError(400, "Choose one of the listed categories.");
+
+  const candidates = process.env.GROQ_DUPLICATE_CHECK === "true" && process.env.GROQ_API_KEY
+    ? await query<SimilarityCandidate>(
+        `select id, item, category, quantity
+           from purchase_requests
+          where status = 'pending'
+          order by created_at desc
+          limit 20`
+      )
+    : [];
+  const suggestedIds = await suggestSemanticDuplicateIds({ item, category, quantity }, candidates);
+  const exactItem = normalizeDuplicateItem(item);
+  const possibleDuplicateIds = suggestedIds.filter((id) => {
+    const candidate = candidates.find((row) => row.id === id);
+    return candidate && normalizeDuplicateItem(candidate.item) !== exactItem;
+  });
 
   return withTx(async (c) => {
-    const cat = await c.query("select 1 from category_norms where category = $1", [category]);
-    if (!cat.rowCount) throw new HttpError(400, "Choose one of the listed categories.");
     const { rows } = await c.query(
-      `insert into purchase_requests (requester_id, department, category, item, quantity, estimated_cost, reason, company)
-       values ($1, $2, $3, $4, $5, $6, $7, $8) returning id, ref`,
-      [a.id, department, category, item, quantity, estimatedCost, reason, co]
+      `insert into purchase_requests (requester_id, department, category, item, quantity, estimated_cost, reason, company, possible_duplicate_ids)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning id, ref`,
+      [a.id, department, category, item, quantity, estimatedCost, reason, co, possibleDuplicateIds]
     );
-    await audit(c, a, "request.created", "purchase_request", rows[0].ref, { item, quantity, estimatedCost, category }, co);
-    return rows[0] as { id: number; ref: string };
+    await audit(c, a, "request.created", "purchase_request", rows[0].ref, { item, quantity, estimatedCost, category, possibleDuplicateIds }, co);
+    return { ...(rows[0] as { id: number; ref: string }), possibleDuplicateCount: possibleDuplicateIds.length };
   });
 }
 
@@ -78,9 +96,6 @@ export async function decideRequest(a: Actor, id: number, body: Body) {
   need(a, "request.decide");
   const decision = v.oneOf(body.decision, "Decision", ["approved", "rejected"] as const);
   const note = typeof body.note === "string" ? body.note.trim().slice(0, 300) : "";
-  if (decision === "rejected" && note.length < 3) {
-    throw new HttpError(400, "Give a short reason when rejecting a request.");
-  }
 
   return withTx(async (c) => {
     const { rows } = await c.query(
@@ -97,12 +112,63 @@ export async function decideRequest(a: Actor, id: number, body: Body) {
       throw new HttpError(403, "Requests made by a manager are approved by the Finance Manager.");
     }
     if (r.status !== "pending") throw new HttpError(409, `This request has already been ${r.status}.`);
+
+    const duplicates = await c.query(
+      `select d.id, d.ref, d.company, d.item, u.name as requester
+         from purchase_requests d
+         join users u on u.id = d.requester_id
+        where d.status = 'pending'
+          and d.id <> $1
+          and lower(trim(d.item)) = lower(trim($2))`,
+      [id, r.item]
+    );
+    const possibleDuplicates = await c.query(
+      `select d.id, d.ref
+         from purchase_requests d
+        where d.status = 'pending'
+          and d.id <> $1
+          and d.id = any($2::int[])
+          and lower(trim(d.item)) <> lower(trim($3))`,
+      [id, r.possible_duplicate_ids ?? [], r.item]
+    );
+    const duplicateRefs = duplicates.rows.map((row) => row.ref as string);
+    if ((decision === "rejected" || duplicates.rowCount || possibleDuplicates.rowCount) && note.length < 3) {
+      throw new HttpError(400, "Give a short reason when deciding a duplicate or possible duplicate request.");
+    }
+
+    const cancelledRefs: string[] = [];
+    if (decision === "approved") {
+      await c.query(
+        "update purchase_requests set status = $1, decided_by = $2, decided_at = now(), decision_note = $3 where id = $4",
+        [decision, a.id, note || null, id]
+      );
+      for (const dup of duplicates.rows) {
+        const cancelNote = `Auto-cancelled as a duplicate of ${r.ref}. Approver's reason: "${note}"`;
+        await c.query(
+          "update purchase_requests set status = 'cancelled', decided_by = $1, decided_at = now(), decision_note = $2 where id = $3",
+          [a.id, cancelNote, dup.id]
+        );
+        cancelledRefs.push(dup.ref as string);
+        await audit(c, a, "request.cancelled_duplicate", "purchase_request", dup.ref, { keptRequest: r.ref, reason: note }, dup.company);
+      }
+      await audit(c, a, `request.${decision}`, "purchase_request", r.ref, {
+        note,
+        cancelled: cancelledRefs,
+        possibleMatches: possibleDuplicates.rows.map((row) => row.ref),
+      });
+      return { ref: r.ref as string, status: decision, cancelledRefs };
+    }
+
     await c.query(
       "update purchase_requests set status = $1, decided_by = $2, decided_at = now(), decision_note = $3 where id = $4",
       [decision, a.id, note || null, id]
     );
-    await audit(c, a, `request.${decision}`, "purchase_request", r.ref, { note });
-    return { ref: r.ref as string, status: decision };
+    await audit(c, a, `request.${decision}`, "purchase_request", r.ref, {
+      note,
+      cancelled: duplicateRefs,
+      possibleMatches: possibleDuplicates.rows.map((row) => row.ref),
+    });
+    return { ref: r.ref as string, status: decision, cancelledRefs: [] };
   });
 }
 

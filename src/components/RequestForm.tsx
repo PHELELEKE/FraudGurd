@@ -27,7 +27,7 @@ export function RequestForm({
     company: defaultCompany as string,
   };
   const [f, setF] = useState(empty);
-  const [done, setDone] = useState<string | null>(null);
+  const [done, setDone] = useState<{ ref: string; possibleDuplicateCount: number } | null>(null);
   const { run, busy, error } = useAction();
   const set = (k: keyof typeof empty) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setF((p) => ({ ...p, [k]: e.target.value }));
@@ -39,9 +39,9 @@ export function RequestForm({
       onSubmit={async (e) => {
         e.preventDefault();
         setDone(null);
-        const out = await run(() => post<{ ref: string }>("/api/requests", f));
+        const out = await run(() => post<{ ref: string; possibleDuplicateCount: number }>("/api/requests", f));
         if (out) {
-          setDone(`${out.ref} was sent for approval.`);
+          setDone({ ref: out.ref, possibleDuplicateCount: out.possibleDuplicateCount ?? 0 });
           setF(empty);
         }
       }}
@@ -98,7 +98,12 @@ export function RequestForm({
       <button className="btn btn-primary w-full" disabled={busy}>
         {busy ? "Sending..." : "Send for approval"}
       </button>
-      {done && <p className="text-[14px] text-low">{done}</p>}
+      {done && (
+        <p className={`text-[14px] ${done.possibleDuplicateCount ? "text-mid" : "text-low"}`}>
+          {done.ref} was sent for approval.
+          {done.possibleDuplicateCount > 0 && ` ${done.possibleDuplicateCount} possible similar pending request${done.possibleDuplicateCount === 1 ? " was" : "s were"} flagged for approver review.`}
+        </p>
+      )}
       <ErrorNote message={error} />
     </form>
   );

@@ -72,6 +72,7 @@ const STATUS: Record<string, { tone: Tone; label: string }> = {
   approved: { tone: "low", label: "Approved" },
   rejected: { tone: "high", label: "Rejected" },
   ordered: { tone: "accent", label: "Ordered" },
+  cancelled: { tone: "neutral", label: "Cancelled" },
   issued: { tone: "accent", label: "Issued" },
   received: { tone: "low", label: "Received" },
   invoiced: { tone: "accent", label: "Invoiced" },

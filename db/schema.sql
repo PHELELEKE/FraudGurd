@@ -185,3 +185,8 @@ create table if not exists password_resets (
   created_at timestamptz not null default now()
 );
 create index if not exists password_resets_user_idx on password_resets (user_id);
+
+-- Duplicate detection can cancel a pending request while keeping the row for audit history.
+alter table purchase_requests drop constraint if exists purchase_requests_status_check;
+alter table purchase_requests add constraint purchase_requests_status_check check (status in ('pending','approved','rejected','ordered','cancelled'));
+alter table purchase_requests add column if not exists possible_duplicate_ids int[] not null default '{}'::int[];

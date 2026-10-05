@@ -43,6 +43,16 @@ export const listSuppliers = () =>
 
 /* ---------- requests ---------- */
 
+export interface RequestDuplicate {
+  ref: string;
+  company: Company;
+  requester: string;
+  created_at: Date;
+  item: string;
+  category: string;
+  quantity: number;
+}
+
 export interface RequestRow {
   id: number;
   ref: string;
@@ -52,7 +62,7 @@ export interface RequestRow {
   quantity: number;
   estimated_cost: number;
   reason: string;
-  status: "pending" | "approved" | "rejected" | "ordered";
+  status: "pending" | "approved" | "rejected" | "ordered" | "cancelled";
   requester_id: number;
   requester: string;
   requester_role: string;
@@ -61,6 +71,8 @@ export interface RequestRow {
   decided_at: Date | null;
   decision_note: string | null;
   created_at: Date;
+  duplicates: RequestDuplicate[];
+  possible_duplicates: RequestDuplicate[];
 }
 export function listRequests(user: SessionUser, companyFilter?: CompanyFilter) {
   const ownOnly = user.role === "employee";
@@ -77,7 +89,38 @@ export function listRequests(user: SessionUser, companyFilter?: CompanyFilter) {
   return query<RequestRow>(
     `select r.id, r.ref, r.item, r.category, r.department, r.quantity, r.estimated_cost, r.reason, r.status,
             r.requester_id, u.name as requester, u.role as requester_role, r.company,
-            d.name as decided_by_name, r.decided_at, r.decision_note, r.created_at
+            d.name as decided_by_name, r.decided_at, r.decision_note, r.created_at,
+            coalesce((
+              select json_agg(json_build_object(
+                'ref', d2.ref,
+                'company', d2.company,
+                'requester', du.name,
+                'created_at', d2.created_at,
+                'item', d2.item,
+                'category', d2.category,
+                'quantity', d2.quantity
+              ) order by d2.created_at)
+              from purchase_requests d2
+              join users du on du.id = d2.requester_id
+              where d2.status = 'pending'
+                and d2.id <> r.id
+                and lower(trim(d2.item)) = lower(trim(r.item))
+            ), '[]'::json) as duplicates,
+            coalesce((
+              select json_agg(json_build_object(
+                'ref', d2.ref,
+                'company', d2.company,
+                'requester', du.name,
+                'created_at', d2.created_at,
+                'item', d2.item,
+                'category', d2.category,
+                'quantity', d2.quantity
+              ) order by d2.created_at)
+              from unnest(r.possible_duplicate_ids) as suggestion(id)
+              join purchase_requests d2 on d2.id = suggestion.id and d2.status = 'pending'
+              join users du on du.id = d2.requester_id
+              where lower(trim(d2.item)) <> lower(trim(r.item))
+            ), '[]'::json) as possible_duplicates
        from purchase_requests r
        join users u on u.id = r.requester_id
        left join users d on d.id = r.decided_by
@@ -93,7 +136,8 @@ export function listApprovedRequests(companyFilter?: CompanyFilter) {
   return query<RequestRow>(
     `select r.id, r.ref, r.item, r.category, r.department, r.quantity, r.estimated_cost, r.reason, r.status,
             r.requester_id, u.name as requester, u.role as requester_role, r.company,
-            null::text as decided_by_name, r.decided_at, r.decision_note, r.created_at
+            null::text as decided_by_name, r.decided_at, r.decision_note, r.created_at,
+            '[]'::json as duplicates, '[]'::json as possible_duplicates
        from purchase_requests r join users u on u.id = r.requester_id
       where r.status = 'approved' ${sql ? "and " + sql : ""}
       order by r.decided_at`,

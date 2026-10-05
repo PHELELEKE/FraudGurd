@@ -66,6 +66,18 @@ The point: the middle band, and a different rule.
 2. Click **Capture another invoice**, choose PO-0022 again, enter `INV-7781` again. Result: **35 Medium, held**, "Possible duplicate invoice".
 3. **Naledi** > Alerts > Review > Reason `Checking with the supplier first` > **Escalate**. The payment stays held. **Pieter (Auditor)** can now see it but has no buttons: read-only.
 
+## Scenario 3B: duplicate requests across companies (about 45 seconds)
+
+The point: a manager sees that two pending requests are the same ask and must explain the decision.
+
+1. On the login page choose **Thandi** and **Sindi** (two different employees) to create two pending requests with the exact same item text: `Wireless presentation remote`.
+   - One goes to **Small Civils**, one to **VZ Coatings**.
+   - Both are still pending and the item match is exact after trimming and lowercasing.
+2. Sign in as **Mpho (Manager)** or **Naledi (Finance Manager)** and open **Requests**. The duplicate warning appears next to both rows listing the other company, requester and request ref.
+3. Try to approve one without a note: the API rejects it with a 400 error and the request stays pending.
+4. Add a written note and approve one request. The other request is automatically marked **Cancelled** with the reason from the approver and the audit trail now shows an entry named `request.cancelled_duplicate` on the cancelled request.
+5. Sign in as the original employee and open **My requests**. The cancelled request still shows there with the cancellation note, exactly like a rejected request.
+
 ## Scenario 4: separation of duties (about 30 seconds)
 
 The point: the roles are enforced, not decoration.
