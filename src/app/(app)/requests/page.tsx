@@ -126,9 +126,11 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
                               Duplicate of {r.duplicates.map((d) => `${COMPANY_LABEL[d.company]}: ${d.requester} (${d.ref})`).join("; ")}
                             </div>
                           )}
-                          {user.role !== "employee" && r.possible_duplicates.length > 0 && (
+                          {r.possible_duplicates.length > 0 && (
                             <div className="mt-2 rounded border border-mid/40 bg-mid/10 px-2 py-1 text-[12px] text-ink">
-                              Possible match suggested by AI; review manually: {r.possible_duplicates.map((d) => `${d.quantity} x ${d.item} (${d.category}, ${COMPANY_LABEL[d.company]}, ${d.ref})`).join("; ")}
+                              {user.role === "employee"
+                                ? "Possible similar pending request found. Your approver will review it."
+                                : `Possible match suggested by AI; review manually: ${r.possible_duplicates.map((d) => `${d.quantity} x ${d.item} (${d.category}, ${COMPANY_LABEL[d.company]}, ${d.ref})`).join("; ")}`}
                             </div>
                           )}
                           {r.decision_note && <div className="mt-1 text-[13px] text-mute">Note: {r.decision_note}</div>}
